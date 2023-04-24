@@ -1,6 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "LinkEditorInteractiveTool.h"
+#include "LinkExtraInteractiveTool.h"
 #include "InteractiveToolManager.h"
 #include "ToolBuilderUtil.h"
 #include "BaseBehaviors/ClickDragBehavior.h"
@@ -12,15 +12,15 @@
 #include "SceneManagement.h"
 
 // localization namespace
-#define LOCTEXT_NAMESPACE "ULinkEditorInteractiveTool"
+#define LOCTEXT_NAMESPACE "ULinkExtraInteractiveTool"
 
 /*
  * ToolBuilder
  */
 
-UInteractiveTool* ULinkEditorInteractiveToolBuilder::BuildTool(const FToolBuilderState & SceneState) const
+UInteractiveTool* ULinkExtraInteractiveToolBuilder::BuildTool(const FToolBuilderState & SceneState) const
 {
-	ULinkEditorInteractiveTool* NewTool = NewObject<ULinkEditorInteractiveTool>(SceneState.ToolManager);
+	ULinkExtraInteractiveTool* NewTool = NewObject<ULinkExtraInteractiveTool>(SceneState.ToolManager);
 	NewTool->SetWorld(SceneState.World);
 	return NewTool;
 }
@@ -31,7 +31,7 @@ UInteractiveTool* ULinkEditorInteractiveToolBuilder::BuildTool(const FToolBuilde
  * Tool
  */
 
-ULinkEditorInteractiveToolProperties::ULinkEditorInteractiveToolProperties()
+ULinkExtraInteractiveToolProperties::ULinkExtraInteractiveToolProperties()
 {
 	// initialize the points and distance to reasonable values
 	StartPoint = FVector(0,0,0);
@@ -40,14 +40,14 @@ ULinkEditorInteractiveToolProperties::ULinkEditorInteractiveToolProperties()
 }
 
 
-void ULinkEditorInteractiveTool::SetWorld(UWorld* World)
+void ULinkExtraInteractiveTool::SetWorld(UWorld* World)
 {
 	check(World);
 	this->TargetWorld = World;
 }
 
 
-void ULinkEditorInteractiveTool::Setup()
+void ULinkExtraInteractiveTool::Setup()
 {
 	UInteractiveTool::Setup();
 
@@ -60,7 +60,7 @@ void ULinkEditorInteractiveTool::Setup()
 	AddInputBehavior(MouseBehavior);
 
 	// Create the property set and register it with the Tool
-	Properties = NewObject<ULinkEditorInteractiveToolProperties>(this, "Measurement");
+	Properties = NewObject<ULinkExtraInteractiveToolProperties>(this, "Measurement");
 	AddToolPropertySource(Properties);
 	
 	bSecondPointModifierDown = false;
@@ -68,7 +68,7 @@ void ULinkEditorInteractiveTool::Setup()
 }
 
 
-void ULinkEditorInteractiveTool::OnUpdateModifierState(int ModifierID, bool bIsOn)
+void ULinkExtraInteractiveTool::OnUpdateModifierState(int ModifierID, bool bIsOn)
 {
 	// keep track of the "second point" modifier (shift key for mouse input)
 	if (ModifierID == MoveSecondPointModifierID)
@@ -78,7 +78,7 @@ void ULinkEditorInteractiveTool::OnUpdateModifierState(int ModifierID, bool bIsO
 }
 
 
-FInputRayHit ULinkEditorInteractiveTool::CanBeginClickDragSequence(const FInputDeviceRay& PressPos)
+FInputRayHit ULinkExtraInteractiveTool::CanBeginClickDragSequence(const FInputDeviceRay& PressPos)
 {
 	// we only start drag if press-down is on top of something we can raycast
 	FVector Temp;
@@ -87,7 +87,7 @@ FInputRayHit ULinkEditorInteractiveTool::CanBeginClickDragSequence(const FInputD
 }
 
 
-void ULinkEditorInteractiveTool::OnClickPress(const FInputDeviceRay& PressPos)
+void ULinkExtraInteractiveTool::OnClickPress(const FInputDeviceRay& PressPos)
 {
 	// determine whether we are moving first or second point for the drag sequence
 	bMoveSecondPoint = bSecondPointModifierDown;
@@ -95,13 +95,13 @@ void ULinkEditorInteractiveTool::OnClickPress(const FInputDeviceRay& PressPos)
 }
 
 
-void ULinkEditorInteractiveTool::OnClickDrag(const FInputDeviceRay& DragPos)
+void ULinkExtraInteractiveTool::OnClickDrag(const FInputDeviceRay& DragPos)
 {
 	UpdatePosition(DragPos.WorldRay);
 }
 
 
-FInputRayHit ULinkEditorInteractiveTool::FindRayHit(const FRay& WorldRay, FVector& HitPos)
+FInputRayHit ULinkExtraInteractiveTool::FindRayHit(const FRay& WorldRay, FVector& HitPos)
 {
 	// trace a ray into the World
 	FCollisionObjectQueryParams QueryParams(FCollisionObjectQueryParams::AllObjects);
@@ -116,7 +116,7 @@ FInputRayHit ULinkEditorInteractiveTool::FindRayHit(const FRay& WorldRay, FVecto
 }
 
 
-void ULinkEditorInteractiveTool::UpdatePosition(const FRay& WorldRay)
+void ULinkExtraInteractiveTool::UpdatePosition(const FRay& WorldRay)
 {
 	FInputRayHit HitResult = FindRayHit(WorldRay, (bMoveSecondPoint) ? Properties->EndPoint : Properties->StartPoint);
 	if (HitResult.bHit)
@@ -126,20 +126,20 @@ void ULinkEditorInteractiveTool::UpdatePosition(const FRay& WorldRay)
 }
 
 
-void ULinkEditorInteractiveTool::UpdateDistance()
+void ULinkExtraInteractiveTool::UpdateDistance()
 {
 	Properties->Distance = FVector::Distance(Properties->StartPoint, Properties->EndPoint);
 }
 
 
-void ULinkEditorInteractiveTool::OnPropertyModified(UObject* PropertySet, FProperty* Property)
+void ULinkExtraInteractiveTool::OnPropertyModified(UObject* PropertySet, FProperty* Property)
 {
 	// if the user updated any of the property fields, update the distance
 	UpdateDistance();
 }
 
 
-void ULinkEditorInteractiveTool::Render(IToolsContextRenderAPI* RenderAPI)
+void ULinkExtraInteractiveTool::Render(IToolsContextRenderAPI* RenderAPI)
 {
 	FPrimitiveDrawInterface* PDI = RenderAPI->GetPrimitiveDrawInterface();
 	// draw a thin line that shows through objects

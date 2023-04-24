@@ -1,21 +1,21 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "LinkEditorSimpleTool.h"
+#include "LinkExtraSimpleTool.h"
 #include "InteractiveToolManager.h"
 #include "ToolBuilderUtil.h"
 #include "CollisionQueryParams.h"
 #include "Engine/World.h"
 
 // localization namespace
-#define LOCTEXT_NAMESPACE "LinkEditorSimpleTool"
+#define LOCTEXT_NAMESPACE "LinkExtraSimpleTool"
 
 /*
  * ToolBuilder implementation
  */
 
-UInteractiveTool* ULinkEditorSimpleToolBuilder::BuildTool(const FToolBuilderState& SceneState) const
+UInteractiveTool* ULinkExtraSimpleToolBuilder::BuildTool(const FToolBuilderState& SceneState) const
 {
-	ULinkEditorSimpleTool* NewTool = NewObject<ULinkEditorSimpleTool>(SceneState.ToolManager);
+	ULinkExtraSimpleTool* NewTool = NewObject<ULinkExtraSimpleTool>(SceneState.ToolManager);
 	NewTool->SetWorld(SceneState.World);
 	return NewTool;
 }
@@ -26,7 +26,7 @@ UInteractiveTool* ULinkEditorSimpleToolBuilder::BuildTool(const FToolBuilderStat
  * ToolProperties implementation
  */
 
-ULinkEditorSimpleToolProperties::ULinkEditorSimpleToolProperties()
+ULinkExtraSimpleToolProperties::ULinkExtraSimpleToolProperties()
 {
 	ShowExtendedInfo = true;
 }
@@ -36,27 +36,27 @@ ULinkEditorSimpleToolProperties::ULinkEditorSimpleToolProperties()
  * Tool implementation
  */
 
-ULinkEditorSimpleTool::ULinkEditorSimpleTool()
+ULinkExtraSimpleTool::ULinkExtraSimpleTool()
 {
 }
 
 
-void ULinkEditorSimpleTool::SetWorld(UWorld* World)
+void ULinkExtraSimpleTool::SetWorld(UWorld* World)
 {
 	this->TargetWorld = World;
 }
 
 
-void ULinkEditorSimpleTool::Setup()
+void ULinkExtraSimpleTool::Setup()
 {
 	USingleClickTool::Setup();
 
-	Properties = NewObject<ULinkEditorSimpleToolProperties>(this);
+	Properties = NewObject<ULinkExtraSimpleToolProperties>(this);
 	AddToolPropertySource(Properties);
 }
 
 
-void ULinkEditorSimpleTool::OnClicked(const FInputDeviceRay& ClickPos)
+void ULinkExtraSimpleTool::OnClicked(const FInputDeviceRay& ClickPos)
 {
 	// we will create actor at this position
 	FVector NewActorPos = FVector::ZeroVector;

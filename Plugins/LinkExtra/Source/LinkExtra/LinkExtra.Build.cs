@@ -2,9 +2,9 @@
 
 using UnrealBuildTool;
 
-public class LinkEditor : ModuleRules
+public class LinkExtra : ModuleRules
 {
-	public LinkEditor(ReadOnlyTargetRules Target) : base(Target)
+	public LinkExtra(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 		

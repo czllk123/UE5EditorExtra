@@ -8,10 +8,10 @@
 /**
  * This class contains info about the full set of commands used in this editor mode.
  */
-class FLinkEditorEditorModeCommands : public TCommands<FLinkEditorEditorModeCommands>
+class FLinkExtraEditorModeCommands : public TCommands<FLinkExtraEditorModeCommands>
 {
 public:
-	FLinkEditorEditorModeCommands();
+	FLinkExtraEditorModeCommands();
 
 	virtual void RegisterCommands() override;
 	static TMap<FName, TArray<TSharedPtr<FUICommandInfo>>> GetCommands();

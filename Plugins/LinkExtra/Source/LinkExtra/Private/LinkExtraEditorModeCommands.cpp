@@ -1,20 +1,20 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "LinkEditorEditorModeCommands.h"
-#include "LinkEditorEditorMode.h"
+#include "LinkExtraEditorModeCommands.h"
+#include "LinkExtraEditorMode.h"
 #include "EditorStyleSet.h"
 
-#define LOCTEXT_NAMESPACE "LinkEditorEditorModeCommands"
+#define LOCTEXT_NAMESPACE "LinkExtraEditorModeCommands"
 
-FLinkEditorEditorModeCommands::FLinkEditorEditorModeCommands()
-	: TCommands<FLinkEditorEditorModeCommands>("LinkEditorEditorMode",
-		NSLOCTEXT("LinkEditorEditorMode", "LinkEditorEditorModeCommands", "LinkEditor Editor Mode"),
+FLinkExtraEditorModeCommands::FLinkExtraEditorModeCommands()
+	: TCommands<FLinkExtraEditorModeCommands>("LinkExtraEditorMode",
+		NSLOCTEXT("LinkExtraEditorMode", "LinkExtraEditorModeCommands", "LinkExtra Editor Mode"),
 		NAME_None,
 		FEditorStyle::GetStyleSetName())
 {
 }
 
-void FLinkEditorEditorModeCommands::RegisterCommands()
+void FLinkExtraEditorModeCommands::RegisterCommands()
 {
 	TArray <TSharedPtr<FUICommandInfo>>& ToolCommands = Commands.FindOrAdd(NAME_Default);
 
@@ -25,9 +25,9 @@ void FLinkEditorEditorModeCommands::RegisterCommands()
 	ToolCommands.Add(InteractiveTool);
 }
 
-TMap<FName, TArray<TSharedPtr<FUICommandInfo>>> FLinkEditorEditorModeCommands::GetCommands()
+TMap<FName, TArray<TSharedPtr<FUICommandInfo>>> FLinkExtraEditorModeCommands::GetCommands()
 {
-	return FLinkEditorEditorModeCommands::Get().Commands;
+	return FLinkExtraEditorModeCommands::Get().Commands;
 }
 
 #undef LOCTEXT_NAMESPACE

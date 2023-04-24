@@ -6,13 +6,13 @@
 #include "UObject/NoExportTypes.h"
 #include "InteractiveToolBuilder.h"
 #include "BaseTools/SingleClickTool.h"
-#include "LinkEditorSimpleTool.generated.h"
+#include "LinkExtraSimpleTool.generated.h"
 
 /**
- * Builder for ULinkEditorSimpleTool
+ * Builder for ULinkExtraSimpleTool
  */
 UCLASS()
-class LINKEDITOR_API ULinkEditorSimpleToolBuilder : public UInteractiveToolBuilder
+class LINKEXTRA_API ULinkExtraSimpleToolBuilder : public UInteractiveToolBuilder
 {
 	GENERATED_BODY()
 
@@ -24,15 +24,15 @@ public:
 
 
 /**
- * Settings UObject for ULinkEditorSimpleTool. This UClass inherits from UInteractiveToolPropertySet,
+ * Settings UObject for ULinkExtraSimpleTool. This UClass inherits from UInteractiveToolPropertySet,
  * which provides an OnModified delegate that the Tool will listen to for changes in property values.
  */
 UCLASS(Transient)
-class LINKEDITOR_API ULinkEditorSimpleToolProperties : public UInteractiveToolPropertySet
+class LINKEXTRA_API ULinkExtraSimpleToolProperties : public UInteractiveToolPropertySet
 {
 	GENERATED_BODY()
 public:
-	ULinkEditorSimpleToolProperties();
+	ULinkExtraSimpleToolProperties();
 
 	/** If enabled, dialog should display extended information about the actor clicked on. Otherwise, only basic info will be shown. */
 	UPROPERTY(EditAnywhere, Category = Options, meta = (DisplayName = "Show Extended Info"))
@@ -43,16 +43,16 @@ public:
 
 
 /**
- * ULinkEditorSimpleTool is an example Tool that opens a message box displaying info about an actor that the user
+ * ULinkExtraSimpleTool is an example Tool that opens a message box displaying info about an actor that the user
  * clicks left mouse button. All the action is in the ::OnClicked handler.
  */
 UCLASS()
-class LINKEDITOR_API ULinkEditorSimpleTool : public USingleClickTool
+class LINKEXTRA_API ULinkExtraSimpleTool : public USingleClickTool
 {
 	GENERATED_BODY()
 
 public:
-	ULinkEditorSimpleTool();
+	ULinkExtraSimpleTool();
 
 	virtual void SetWorld(UWorld* World);
 
@@ -63,7 +63,7 @@ public:
 
 protected:
 	UPROPERTY()
-	TObjectPtr<ULinkEditorSimpleToolProperties> Properties;
+	TObjectPtr<ULinkExtraSimpleToolProperties> Properties;
 
 
 protected:

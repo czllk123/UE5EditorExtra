@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Tools/UEdMode.h"
-#include "LinkEditorEditorMode.generated.h"
+#include "LinkExtraEditorMode.generated.h"
 
 /**
  * This class provides an example of how to extend a UEdMode to add some simple tools
@@ -15,18 +15,18 @@
  * Take a look at the UEdMode markup for more extensibility options.
  */
 UCLASS()
-class ULinkEditorEditorMode : public UEdMode
+class ULinkExtraEditorMode : public UEdMode
 {
 	GENERATED_BODY()
 
 public:
-	const static FEditorModeID EM_LinkEditorEditorModeId;
+	const static FEditorModeID EM_LinkExtraEditorModeId;
 
 	static FString SimpleToolName;
 	static FString InteractiveToolName;
 
-	ULinkEditorEditorMode();
-	virtual ~ULinkEditorEditorMode();
+	ULinkExtraEditorMode();
+	virtual ~ULinkExtraEditorMode();
 
 	/** UEdMode interface */
 	virtual void Enter() override;

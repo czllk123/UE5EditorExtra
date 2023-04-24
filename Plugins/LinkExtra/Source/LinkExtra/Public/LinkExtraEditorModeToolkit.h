@@ -4,16 +4,16 @@
 
 #include "CoreMinimal.h"
 #include "Toolkits/BaseToolkit.h"
-#include "LinkEditorEditorMode.h"
+#include "LinkExtraEditorMode.h"
 
 /**
  * This FModeToolkit just creates a basic UI panel that allows various InteractiveTools to
  * be initialized, and a DetailsView used to show properties of the active Tool.
  */
-class FLinkEditorEditorModeToolkit : public FModeToolkit
+class FLinkExtraEditorModeToolkit : public FModeToolkit
 {
 public:
-	FLinkEditorEditorModeToolkit();
+	FLinkExtraEditorModeToolkit();
 
 	/** FModeToolkit interface */
 	virtual void Init(const TSharedPtr<IToolkitHost>& InitToolkitHost, TWeakObjectPtr<UEdMode> InOwningMode) override;

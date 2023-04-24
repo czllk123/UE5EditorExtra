@@ -5,14 +5,14 @@
 #include "CoreMinimal.h"
 #include "InteractiveToolBuilder.h"
 #include "BaseTools/ClickDragTool.h"
-#include "LinkEditorInteractiveTool.generated.h"
+#include "LinkExtraInteractiveTool.generated.h"
 
 
 /**
- * Builder for ULinkEditorInteractiveTool
+ * Builder for ULinkExtraInteractiveTool
  */
 UCLASS()
-class LINKEDITOR_API ULinkEditorInteractiveToolBuilder : public UInteractiveToolBuilder
+class LINKEXTRA_API ULinkExtraInteractiveToolBuilder : public UInteractiveToolBuilder
 {
 	GENERATED_BODY()
 
@@ -23,15 +23,15 @@ public:
 
 
 /**
- * Property set for the ULinkEditorInteractiveTool
+ * Property set for the ULinkExtraInteractiveTool
  */
 UCLASS(Transient)
-class LINKEDITOR_API ULinkEditorInteractiveToolProperties : public UInteractiveToolPropertySet
+class LINKEXTRA_API ULinkExtraInteractiveToolProperties : public UInteractiveToolPropertySet
 {
 	GENERATED_BODY()
 
 public:
-	ULinkEditorInteractiveToolProperties();
+	ULinkExtraInteractiveToolProperties();
 
 	/** First point of measurement */
 	UPROPERTY(EditAnywhere, Category = Options)
@@ -49,12 +49,12 @@ public:
 
 
 /**
- * ULinkEditorInteractiveTool is an example Tool that allows the user to measure the 
+ * ULinkExtraInteractiveTool is an example Tool that allows the user to measure the 
  * distance between two points. The first point is set by click-dragging the mouse, and
  * the second point is set by shift-click-dragging the mouse.
  */
 UCLASS()
-class LINKEDITOR_API ULinkEditorInteractiveTool : public UInteractiveTool, public IClickDragBehaviorTarget
+class LINKEXTRA_API ULinkExtraInteractiveTool : public UInteractiveTool, public IClickDragBehaviorTarget
 {
 	GENERATED_BODY()
 
@@ -81,7 +81,7 @@ public:
 protected:
 	/** Properties of the tool are stored here */
 	UPROPERTY()
-	TObjectPtr<ULinkEditorInteractiveToolProperties> Properties;
+	TObjectPtr<ULinkExtraInteractiveToolProperties> Properties;
 
 
 protected:
