@@ -18,11 +18,14 @@ void FLinkExtraEditorModeCommands::RegisterCommands()
 {
 	TArray <TSharedPtr<FUICommandInfo>>& ToolCommands = Commands.FindOrAdd(NAME_Default);
 
-	UI_COMMAND(SimpleTool, "Show Actor Info", "Opens message box with info about a clicked actor", EUserInterfaceActionType::Button, FInputChord());
-	ToolCommands.Add(SimpleTool);
+	UI_COMMAND(MaskPainterMode, "Mode - PaintCompMask", "", EUserInterfaceActionType::RadioButton, FInputChord());
+	ToolCommands.Add(MaskPainterMode);
 
-	UI_COMMAND(InteractiveTool, "Measure Distance", "Measures distance between 2 points (click to set origin, shift-click to set end point)", EUserInterfaceActionType::ToggleButton, FInputChord());
-	ToolCommands.Add(InteractiveTool);
+	UI_COMMAND(FoliagePainterMode, "Mode - PaintFoliage", "", EUserInterfaceActionType::RadioButton, FInputChord());
+	ToolCommands.Add(FoliagePainterMode);
+
+	//UI_COMMAND(InteractiveTool, "Measure Distance", "Measures distance between 2 points (click to set origin, shift-click to set end point)", EUserInterfaceActionType::ToggleButton, FInputChord());
+	//ToolCommands.Add(InteractiveTool);
 }
 
 TMap<FName, TArray<TSharedPtr<FUICommandInfo>>> FLinkExtraEditorModeCommands::GetCommands()

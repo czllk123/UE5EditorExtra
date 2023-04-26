@@ -59,8 +59,8 @@ void ULinkExtraEditorMode::Enter()
 	////////////////////////////////////////////////////////////////////////// 
 	const FLinkExtraEditorModeCommands& SampleToolCommands = FLinkExtraEditorModeCommands::Get();
 
-	RegisterTool(SampleToolCommands.SimpleTool, SimpleToolName, NewObject<ULinkExtraSimpleToolBuilder>(this));
-	RegisterTool(SampleToolCommands.InteractiveTool, InteractiveToolName, NewObject<ULinkExtraInteractiveToolBuilder>(this));
+	//RegisterTool(SampleToolCommands.SimpleTool, SimpleToolName, NewObject<ULinkExtraSimpleToolBuilder>(this));
+	//RegisterTool(SampleToolCommands.InteractiveTool, InteractiveToolName, NewObject<ULinkExtraInteractiveToolBuilder>(this));
 
 	// active tool type is not relevant here, we just set to default
 	GetToolManager()->SelectActiveToolType(EToolSide::Left, SimpleToolName);
