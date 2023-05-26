@@ -6,8 +6,10 @@
 #include "Components/ActorComponent.h"
 #include "TestComponent.generated.h"
 
-
-UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+//@作者：李林科
+//@用途：測試
+UCLASS(ClassGroup=(Custom),
+	HideCategories=(Tags, Activation, Cooking, AssetUserData,Collision),meta=(BlueprintSpawnableComponent))
 class LINKEXTRA_API UTestComponent : public UActorComponent
 {
 	GENERATED_BODY()
