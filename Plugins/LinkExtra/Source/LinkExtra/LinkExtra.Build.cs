@@ -44,7 +44,9 @@ public class LinkExtra : ModuleRules
 				"UnrealEd",
 				"LevelEditor",
 				"InteractiveToolsFramework",
-				"EditorInteractiveToolsFramework"
+				"EditorInteractiveToolsFramework", 
+				"Foliage", 
+				"FoliageEdit"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
