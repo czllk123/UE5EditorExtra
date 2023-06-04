@@ -25,10 +25,10 @@ public:
 */
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category=AddToFoliage)
-		static bool AddToFoliageInstance(const UObject* WorldContextObject, UStaticMesh *InStaticMesh, int32 StaticMeshIndex, FTransform Transform,  FString SavePath, TMap<int32, FGuid>& FoliageUUIDs);
+		static bool AddToFoliageInstance(const UObject* WorldContextObject, UStaticMesh *InStaticMesh, int32 StaticMeshIndex, FTransform Transform,  FString SavePath, TMap<AInstancedFoliageActor*, FGuid>& FoliageUUIDs);
 
 	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
-		static bool RemoveFoliageInstance(AInstancedFoliageActor* InstancedFoliageActor, TArray<FGuid> FoliageInstanceUUID);
+		static bool RemoveFoliageInstance(TMap<AInstancedFoliageActor*, FGuid> FoliageUUIDs);
 
 	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
 		static TArray<int32> CalculateWeightAverage(const TArray<float>& Weights, int32 OutputSize);

@@ -18,7 +18,8 @@
 #include "Engine/Brush.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/BrushComponent.h"
-
+#include "Engine/LevelStreamingVolume.h"
+#include "Engine/LevelBounds.h"
 
 
 
@@ -35,30 +36,69 @@ AInstancedFoliageActor* UAddToInstance::GetOrCreateIFA()
 }
 */
 
-bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject,UStaticMesh* InStaticMesh, int32 StaticMeshIndex, FTransform Transform,  FString SavePath, TMap<int32, FGuid>& FoliageUUIDs)
+
+
+bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject,UStaticMesh* InStaticMesh, int32 StaticMeshIndex, FTransform Transform,  FString SavePath, TMap<AInstancedFoliageActor*, FGuid>& FoliageUUIDs)
 {
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
 	
 	FVector StartLocation = Transform.GetLocation()+FVector(0.0f,0.0f,0.01f);
-	FVector EndLocation = StartLocation - FVector(0.0f, 0.0f, 9000.0f);
+	FVector EndLocation = StartLocation - FVector(0.0f, 0.0f, 90000.0f);
 	FCollisionQueryParams CollisionParams;
 	CollisionParams.bTraceComplex = true;
 	FHitResult Hit;
 
 	ULevel* CurrentLevel = nullptr; // 提前声明CurrentLevel变量
 	UPrimitiveComponent* BaseComp = nullptr;
+	FVector HitLocation;
 	
 	bool bHit = World->LineTraceSingleByChannel(Hit, StartLocation, EndLocation, ECC_Visibility, CollisionParams,FCollisionResponseParams());
 	if(bHit)
 	{
-		CurrentLevel = Hit.GetActor()->GetLevel();
 		BaseComp = Hit.Component.Get();
+		//CurrentLevel = Hit.GetActor()->GetLevel();
+		CurrentLevel = BaseComp->GetComponentLevel();
+		
+		HitLocation = Hit.ImpactPoint;
+		//UE_LOG(LogTemp,Warning,TEXT("当前关卡为：%s"),*CurrentLevel->GetName());
 	}
 	else
 	{
 		UE_LOG(LogTemp,Error,TEXT("当前射线未击中任何物体！！！"));
 	}
 	DrawDebugLine(World,StartLocation,EndLocation,FColor::Red,false,5.0f,0,5.0f);
+	
+	const TArray<ULevelStreaming*>& StreamedLevels = World->GetStreamingLevels();
+
+
+	ULevel* LevelOfHitActor = nullptr;
+
+	for (const ULevelStreaming* EachLevelStreaming : StreamedLevels)
+	{
+		if(!EachLevelStreaming) 
+		{
+			continue;
+		}
+	
+		ULevel* EachLevel =  EachLevelStreaming->GetLoadedLevel();
+	
+		//Is This Level Valid and Visible?
+		if(!EachLevel || !EachLevel->bIsVisible) 
+		{
+			continue;
+		}
+		 
+		//Is the Hit Location Within this Level's Bounds?
+		if(ALevelBounds::CalculateLevelBounds(EachLevel).IsInside(HitLocation))
+		{
+			LevelOfHitActor = EachLevel;
+			CurrentLevel = EachLevel;
+			UE_LOG(LogTemp,Warning,TEXT("当前关卡为：%s"),*CurrentLevel->GetName());
+			break;
+		}
+	}
+
+	
 	
 	AInstancedFoliageActor* InstancedFoliageActor = AInstancedFoliageActor::GetInstancedFoliageActorForLevel(CurrentLevel, true);
 	//如果IFA不存在或者无效，返回false
@@ -68,56 +108,77 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject,USta
 		return false;
 	}
 
+///////////////////////////这一块写的比较乱////////////////////////////////////////
+///首先先去StaticMesh对应的文件夹里面找是否存在之前创建的FoliageType文件，如果存在就直接用，
+///对应的路径有两种，一种是自定义路径，第二种是默认的路径为StaticMesh所在路径
+///如果两个文件夹都没有对应StaticMesh_FoliageType文件，就使用InstancedFoliageActor->GetAllFoliageTypesForSource查找
+///如果还是没找到就新建一个FoliageType
+////////////////////////////////////////////////////////////////////////////////////
 
-	FGuid FoliageInstaceGuid;
-	FoliageInstaceGuid = FGuid::NewGuid();
-	
+	FGuid FoliageInstanceGuid;
+	FoliageInstanceGuid = FGuid::NewGuid();
+
 	//打印当前植被的UUID
 	//UE_LOG(LogTemp, Warning, TEXT("FoliageInstaceGuid is : %s"), *FoliageInstaceGuid.ToString());
+
+	//获取给定的StaticMesh名称作为FoliageType名称
+	const FString FoliageTypeName = FString::Format(TEXT("{0}_FoliageType"),{InStaticMesh->GetName()});
+	
+	// 设置资产保存的目标路径
+	//FString Path = TEXT("/Game/MyFoliageTypes/"); // 自定义保存路径
+	FString AssetPath;
+	//SavePath是传进来的参数,如果为空，直接使用static mesh 的路径
+	if(SavePath.IsEmpty())
+	{
+		//AssetPath = TEXT("/Game/FoliageTypes/");
+		FString MeshPath = FPaths::GetPath(InStaticMesh->GetPathName())+"/";
+		AssetPath = MeshPath;
+	}
+	else
+	{
+		AssetPath = SavePath;
+	}
+	FString AssetName = FoliageTypeName;
+	//FoliageType的相对路径,这个只用来新建Object,保存FolaigeType还是得用绝对路径
+	FString PackagePath = AssetPath + AssetName;
+		
+	//当前项目Content目录的绝对路径
+	FString ProjectContentPath = FPaths::ProjectContentDir();
+		
+	//减去“/Game/”后的AssetPath剩余路径
+	FString SubPath = AssetPath.RightChop(6); // 6 is the length of "/Game/"
+
+	//拼接完成后储存FoliageType的绝对路径
+	FString FullPath = FPaths::Combine(ProjectContentPath, SubPath);
+		
+	//删除多于斜杠 //content->/content
+	FPaths::RemoveDuplicateSlashes(FullPath);
+	
+
 	
 	//获取给定static mesh 所有的Foliage Type,这里的FoliageType 类型必须是UFoliageType，不能是 UFoliageType_InstancedStaticMesh，要不然下面那个函数用不了
 	TArray<const UFoliageType*> FoliageTypes;
+	//通过ifa来查询StaticMesh对应的FoliageType
 	InstancedFoliageActor->GetAllFoliageTypesForSource(InStaticMesh, FoliageTypes);
 
-	//如果给定的StaticMesh没已有关联的FoliageType,则新建一个。
 	UFoliageType* FoliageType;
-	if(FoliageTypes.Num()==0)
+
+	// 检查 AssetPath 下是否存在以 InStaticMesh 命名的 FoliageType
+	FString FullFoliageTypePath = AssetPath + FoliageTypeName;
+	UFoliageType* FoundFoliageType = LoadObject<UFoliageType>(nullptr, *FullFoliageTypePath);
+
+	if (FoundFoliageType)
 	{
-		//获取给定的StaticMesh名称作为FoliageType名称
-		const FString FoliageTypeName = FString::Format(TEXT("{0}_FoliageType"),{InStaticMesh->GetName()});
+		// 存在以 InStaticMesh 命名的 FoliageType，直接使用它
+		FoliageType = FoundFoliageType;
+	}
+	
+	//如果给定的StaticMesh没已有关联的FoliageType,则新建一个。
+	else if (FoliageTypes.Num()==0)
+	{
 		//这个新建的FoliageType对象的Outer为InstancedFoliageActor，用于实例化植被
 		FoliageType = NewObject<UFoliageType_InstancedStaticMesh>(InstancedFoliageActor, *FoliageTypeName,RF_Public | RF_Standalone);
 		//这个地方别对这个foliageType做任何更改，只是将他创建出来用来撒点，最后将这个保存成foliageType文件，然后对它做相应的设置
-
-		
-		// 设置资产保存的目标路径
-		//FString Path = TEXT("/Game/MyFoliageTypes/"); // 自定义保存路径
-		FString AssetPath;
-		//SavePath是传进来的参数
-		if(SavePath.IsEmpty())
-		{
-			AssetPath = TEXT("/Game/FoliageTypes/");
-		}
-		else
-		{
-			AssetPath = SavePath;
-		}
-		FString AssetName = FoliageTypeName;
-		//FoliageType的相对路径,这个只用来新建Object,保存FolaigeType还是得用绝对路径
-		FString PackagePath = AssetPath + AssetName;
-		
-		//当前项目Content目录的绝对路径
-		FString ProjectContentPath = FPaths::ProjectContentDir();
-		
-		//减去“/Game/”后的AssetPath剩余路径
-		FString SubPath = AssetPath.RightChop(6); // 6 is the length of "/Game/"
-
-		//拼接完成后储存FoliageType的绝对路径
-		FString FullPath = FPaths::Combine(ProjectContentPath, SubPath);
-		
-		//删除多于斜杠 //content->/content
-		 FPaths::RemoveDuplicateSlashes(FullPath);
-
 		
 		//创建一个新的空的资源包
 		UPackage* NewPackage  = CreatePackage(nullptr, *PackagePath);
@@ -125,69 +186,54 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject,USta
 		// 加载资源包到内存
 		NewPackage->FullyLoad();
 		
-		// 检查资产是否已存在，如果已存在，则什么都不做
-		if (FindObject<UObject>(NewPackage, *AssetName ))
+		if (!FindObject<UObject>(NewPackage, *AssetName ))
 		{
-			return false;
-		}
-		
-		//DuplicateObject函数创建一个新的 UFoliageType 对象，它将复制源 FoliageType 对象的属性和值，并且将outer更改为AssetPackage用于保存上面新建的FoliageType文件，在这个地方对FoliageType进行设置
-		UFoliageType* FoliageTypeAsset = DuplicateObject<UFoliageType>(FoliageType, NewPackage, *AssetName);
-		
-		//设置FoliageType相关属性
-		FoliageTypeAsset->SetSource(InStaticMesh);
-		InstancedFoliageActor->AddFoliageType(FoliageTypeAsset);
+			//DuplicateObject函数创建一个新的 UFoliageType 对象，它将复制源 FoliageType 对象的属性和值，并且将outer更改为AssetPackage用于保存上面新建的FoliageType文件，在这个地方对FoliageType进行设置
+			UFoliageType* FoliageTypeAsset = DuplicateObject<UFoliageType>(FoliageType, NewPackage, *AssetName);
 
-		FAssetRegistryModule::AssetCreated(FoliageTypeAsset);
-		
-		//标脏要设置给具体的Asset, 上面新建的NewPackage到“DuplicateObject”函数后就没用了
-		if (FoliageTypeAsset != nullptr)
-		{
-			// 标记资源包为"脏"
-			bool bIsMarkedDirty = FoliageTypeAsset->MarkPackageDirty();
+			//设置FoliageType相关属性
+			FoliageTypeAsset->SetSource(InStaticMesh);
+			InstancedFoliageActor->AddFoliageType(FoliageTypeAsset);
 
-			if (bIsMarkedDirty)
+			FAssetRegistryModule::AssetCreated(FoliageTypeAsset);
+			if (FoliageTypeAsset)
 			{
-				UE_LOG(LogTemp, Log, TEXT("FoliageTypeAsset has been successfully marked as dirty."));
-			}
-			else
-			{
-				UE_LOG(LogTemp, Warning, TEXT("Failed to mark FoliageTypeAsset as dirty."));
-			}
-		}
-		
-		// 保存资产
-		FString FilePath = FString::Printf(TEXT("%s%s%s"), *FullPath, *AssetName, *FPackageName::GetAssetPackageExtension());
-		bool const bSaved = UPackage::SavePackage(NewPackage, FoliageTypeAsset, EObjectFlags::RF_Public | EObjectFlags::RF_Standalone, *FilePath);
-		
-		/*
-		const FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-		
-		if (bSaved)
-		{
-			// 通知资产注册表有关新资产的信息
-			AssetRegistryModule.Get().AddPath(AssetPath);
-			
-			// Scan the asset files in the specified path to update the registry
-			TArray<FString> ScanPaths;
-			ScanPaths.Add(AssetPath);
-			AssetRegistryModule.Get().ScanPathsSynchronous(ScanPaths);
+				bool bIsMarkedDirty = FoliageTypeAsset->MarkPackageDirty();
 
-			AssetRegistryModule.Get().AssetCreated(FoliageTypeAsset);
+				if (!bIsMarkedDirty)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Failed to mark FoliageTypeAsset as dirty."));
+				}
+			}
+			// 保存资产
+			FString FilePath = FString::Printf(TEXT("%s%s%s"), *FullPath, *AssetName, *FPackageName::GetAssetPackageExtension());
+			bool const bSaved = UPackage::SavePackage(NewPackage, FoliageTypeAsset, EObjectFlags::RF_Public | EObjectFlags::RF_Standalone, *FilePath);
+
 		}
-		// After saving the asset and updating the asset registry
-		const FContentBrowserModule& ContentBrowserModule = FModuleManager::LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
-		ContentBrowserModule.Get().SyncBrowserToAssets(TArray<FAssetData>{ FAssetData(FoliageTypeAsset) });
-		*/
 	}
+	
 	else
 	{
 		//如果StaticMesh指向的FoliageType已经存在或者存在多个，那就用第一个。
 		FoliageType = const_cast<UFoliageType*>(FoliageTypes[0]);
 	}
 
-	// 查找Foliage Type对应的Foliage Info
+	//设置FoliageType相关属性
+	//FoliageType->SetSource(InStaticMesh);
+	//InstancedFoliageActor->AddFoliageType(FoliageType);
 	FFoliageInfo* FoliageInfo = InstancedFoliageActor->FindInfo(FoliageType);
+
+	
+	if (!FoliageInfo)
+	{
+		// 添加新的FoliageType到InstancedFoliageActor中，并返回对应的FoliageInfo
+
+		FoliageType->SetSource(InStaticMesh);
+		InstancedFoliageActor->AddFoliageType(FoliageType);
+		FoliageInfo = InstancedFoliageActor->FindInfo(FoliageType);
+		UE_LOG(LogTemp, Warning, TEXT("No FFoliageInfo found for this UFoliageType."));
+		
+	}
 
 	//如果找到了FoliageInfo
 	if(FoliageInfo)
@@ -245,14 +291,14 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject,USta
 			FoliageInfo->AddToBaseHash(FoliageInstanceIndex);
 			
 			
-			//上面通过传入FoliageInstaceGuid传到ProceduralGuid
-			FoliageInstance->ProceduralGuid = FoliageInstaceGuid;
+			//上面通过传入FoliageInstanceGuid传到ProceduralGuid
+			FoliageInstance->ProceduralGuid = FoliageInstanceGuid;
 			
 			//Need To Be Called After Instance Is Moved
 			FoliageInfo->PostMoveInstances({ FoliageInstanceIndex });
 			
 			//输出植被的UUID
-			FoliageUUIDs.Add(StaticMeshIndex, FoliageInstaceGuid);
+			FoliageUUIDs.Add(InstancedFoliageActor, FoliageInstanceGuid);
 
 			//刷新新指定的 InstancedFoliageActor 中的植被信息。
 			FoliageInfo->Refresh(true, true);
@@ -272,47 +318,62 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject,USta
 
 }
 
-bool UAddToInstance::RemoveFoliageInstance(AInstancedFoliageActor* InstancedFoliageActor, TArray<FGuid> FoliageInstanceUUID)
+
+bool UAddToInstance::RemoveFoliageInstance(TMap<AInstancedFoliageActor*, FGuid> FoliageUUIDs)
 {
-	//如果IFA不存在或者无效，返回false
-	if(!InstancedFoliageActor || !IsValid(InstancedFoliageActor))
-	{
-		UE_LOG(LogTemp,Error,TEXT("Can not find InstancedFoliageActor!!!"))
-		return false;
-	}
+    //如果没有任何FoliageUUIDs，返回false
+    if(FoliageUUIDs.Num() == 0)
+    {
+        UE_LOG(LogTemp,Error,TEXT("FoliageUUIDs is empty!!!"))
+        return false;
+    }
+    
+    //遍历所有的FoliageUUIDs
+    for(auto& FoliagePair : FoliageUUIDs)
+    {
+        AInstancedFoliageActor* InstancedFoliageActor = FoliagePair.Key;
+        FGuid FoliageInstanceUUID = FoliagePair.Value;
 
-	//遍历所有的FoliageInfos
-	for (auto& FoliagePair:InstancedFoliageActor->GetFoliageInfos())
-	{
-		// 获取 FoliageInfo 引用 , 将 const 引用转换为非 const 引用
-		FFoliageInfo& FoliageInfo =const_cast<FFoliageInfo&>(FoliagePair.Value.Get());
-		// 创建一个用于存储要删除的实例索引的数组
-		TArray<int32> InstanceIndicesToRemove;
+        //如果IFA不存在或者无效，返回false
+        if(!InstancedFoliageActor || !IsValid(InstancedFoliageActor))
+        {
+            UE_LOG(LogTemp,Error,TEXT("Can not find InstancedFoliageActor!!!"))
+            continue;
+        }
 
-		//遍历所有的Foliage实例，检查他们的UUID是否在要删除的数组中
-		for (int32 i = 0; i<FoliageInfo.Instances.Num(); i++)
-		{
-			// 遍历 FoliageInfo 中的所有实例
-			FGuid InstanceUUID = FoliageInfo.Instances[i].ProceduralGuid;
-			// 检查 UUID 是否存在于要删除的 FoliageInstanceUUID 数组中
-			if(FoliageInstanceUUID.Contains(InstanceUUID))
-			{
-				//如果找到要删除的实例，将其索引添加到要删除的实例索引数组中
-				InstanceIndicesToRemove.Add(i);
-			}
-		}
-		//对找到要删除的索引，按逆序对他们进行排序，以便在删除时不会影响其他实例的索引
-		InstanceIndicesToRemove.Sort([](const int32& A, const int32& B) {return A > B; });
+        //遍历所有的FoliageInfos
+        for (auto& FoliageInfoPair:InstancedFoliageActor->GetFoliageInfos())
+        {
+            // 获取 FoliageInfo 引用 , 将 const 引用转换为非 const 引用
+            FFoliageInfo& FoliageInfo =const_cast<FFoliageInfo&>(FoliageInfoPair.Value.Get());
+            // 创建一个用于存储要删除的实例索引的数组
+            TArray<int32> InstanceIndicesToRemove;
 
-		//遍历要删除实例的索引数组，从FoliageInfo中删除他们
-		for (int32 IndexToRemove : InstanceIndicesToRemove )
-		{
-			FoliageInfo.RemoveInstances(TArray<int32> {IndexToRemove} ,true);
-		}
-		FoliageInfo.Refresh(true, true);
-	}
-	
-	return true;
+            //遍历所有的Foliage实例，检查他们的UUID是否等于要删除的UUID
+            for (int32 i = 0; i<FoliageInfo.Instances.Num(); i++)
+            {
+                // 遍历 FoliageInfo 中的所有实例
+                FGuid InstanceUUID = FoliageInfo.Instances[i].ProceduralGuid;
+                // 检查 UUID 是否等于要删除的 FoliageInstanceUUID 
+                if(InstanceUUID == FoliageInstanceUUID)
+                {
+                    //如果找到要删除的实例，将其索引添加到要删除的实例索引数组中
+                    InstanceIndicesToRemove.Add(i);
+                }
+            }
+            //对找到要删除的索引，按逆序对他们进行排序，以便在删除时不会影响其他实例的索引
+            InstanceIndicesToRemove.Sort([](const int32& A, const int32& B) {return A > B; });
+
+            //遍历要删除实例的索引数组，从FoliageInfo中删除他们
+            for (int32 IndexToRemove : InstanceIndicesToRemove )
+            {
+                FoliageInfo.RemoveInstances(TArray<int32> {IndexToRemove} ,true);
+            }
+            FoliageInfo.Refresh(true, true);
+        }
+    }
+
+    return true;
 }
 
 TArray<int32> UAddToInstance::CalculateWeightAverage(const TArray<float>& Weights, int32 OutputSize)
