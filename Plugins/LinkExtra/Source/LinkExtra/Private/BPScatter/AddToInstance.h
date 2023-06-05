@@ -25,7 +25,7 @@ public:
 */
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category=AddToFoliage)
-		static bool AddToFoliageInstance(const UObject* WorldContextObject, UStaticMesh *InStaticMesh, int32 StaticMeshIndex, FTransform Transform,  FString SavePath, TMap<AInstancedFoliageActor*, FGuid>& FoliageUUIDs);
+		static bool AddToFoliageInstance(const UObject* WorldContextObject, FGuid FoliageInstanceGuid, UStaticMesh *InStaticMesh, int32 StaticMeshIndex, FTransform Transform,  FString SavePath, TMap<AInstancedFoliageActor*, FGuid>& FoliageUUIDs);
 
 	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
 		static bool RemoveFoliageInstance(TMap<AInstancedFoliageActor*, FGuid> FoliageUUIDs);

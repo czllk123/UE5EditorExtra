@@ -13,13 +13,8 @@
 #include "IContentBrowserSingleton.h"
 #include "Engine/StaticMesh.h"
 #include "InstancedFoliageActor.h"
-#include "BehaviorTree/BehaviorTreeTypes.h"
-#include "Components/ModelComponent.h"
 #include "Engine/Brush.h"
 #include "Components/PrimitiveComponent.h"
-#include "Components/BrushComponent.h"
-#include "Engine/LevelStreamingVolume.h"
-#include "Engine/LevelBounds.h"
 
 
 
@@ -38,7 +33,7 @@ AInstancedFoliageActor* UAddToInstance::GetOrCreateIFA()
 
 
 
-bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject,UStaticMesh* InStaticMesh, int32 StaticMeshIndex, FTransform Transform,  FString SavePath, TMap<AInstancedFoliageActor*, FGuid>& FoliageUUIDs)
+bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, FGuid FoliageInstanceGuid, UStaticMesh* InStaticMesh, int32 StaticMeshIndex, FTransform Transform,  FString SavePath, TMap<AInstancedFoliageActor*, FGuid>& FoliageUUIDs)
 {
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
 	
@@ -48,7 +43,7 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject,USta
 	CollisionParams.bTraceComplex = true;
 	FHitResult Hit;
 
-	ULevel* CurrentLevel = nullptr; // 提前声明CurrentLevel变量
+	ULevel* CurrentLevel = nullptr; 
 	UPrimitiveComponent* BaseComp = nullptr;
 	FVector HitLocation;
 	
@@ -56,10 +51,8 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject,USta
 	if(bHit)
 	{
 		BaseComp = Hit.Component.Get();
-		//CurrentLevel = Hit.GetActor()->GetLevel();
-		CurrentLevel = BaseComp->GetComponentLevel();
+		CurrentLevel = Hit.GetActor()->GetLevel();
 		
-		HitLocation = Hit.ImpactPoint;
 		//UE_LOG(LogTemp,Warning,TEXT("当前关卡为：%s"),*CurrentLevel->GetName());
 	}
 	else
@@ -67,38 +60,6 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject,USta
 		UE_LOG(LogTemp,Error,TEXT("当前射线未击中任何物体！！！"));
 	}
 	DrawDebugLine(World,StartLocation,EndLocation,FColor::Red,false,5.0f,0,5.0f);
-	
-	const TArray<ULevelStreaming*>& StreamedLevels = World->GetStreamingLevels();
-
-
-	ULevel* LevelOfHitActor = nullptr;
-
-	for (const ULevelStreaming* EachLevelStreaming : StreamedLevels)
-	{
-		if(!EachLevelStreaming) 
-		{
-			continue;
-		}
-	
-		ULevel* EachLevel =  EachLevelStreaming->GetLoadedLevel();
-	
-		//Is This Level Valid and Visible?
-		if(!EachLevel || !EachLevel->bIsVisible) 
-		{
-			continue;
-		}
-		 
-		//Is the Hit Location Within this Level's Bounds?
-		if(ALevelBounds::CalculateLevelBounds(EachLevel).IsInside(HitLocation))
-		{
-			LevelOfHitActor = EachLevel;
-			CurrentLevel = EachLevel;
-			UE_LOG(LogTemp,Warning,TEXT("当前关卡为：%s"),*CurrentLevel->GetName());
-			break;
-		}
-	}
-
-	
 	
 	AInstancedFoliageActor* InstancedFoliageActor = AInstancedFoliageActor::GetInstancedFoliageActorForLevel(CurrentLevel, true);
 	//如果IFA不存在或者无效，返回false
@@ -115,8 +76,8 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject,USta
 ///如果还是没找到就新建一个FoliageType
 ////////////////////////////////////////////////////////////////////////////////////
 
-	FGuid FoliageInstanceGuid;
-	FoliageInstanceGuid = FGuid::NewGuid();
+	//FGuid FoliageInstanceGuid;
+	//FoliageInstanceGuid = FGuid::NewGuid();
 
 	//打印当前植被的UUID
 	//UE_LOG(LogTemp, Warning, TEXT("FoliageInstaceGuid is : %s"), *FoliageInstaceGuid.ToString());
