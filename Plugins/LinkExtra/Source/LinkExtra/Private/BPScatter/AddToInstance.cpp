@@ -3,65 +3,49 @@
 
 #include "AddToInstance.h"
 #include "AssetRegistryModule.h"
-#include "AssetToolsModule.h"
 #include "ContentBrowserModule.h"
 #include "UObject/UObjectGlobals.h"
-#include "FoliageEditModule.h"
 #include "UObject/Package.h"
 #include "Misc/Guid.h"
 #include "InstancedFoliageActor.h"
-#include "IContentBrowserSingleton.h"
 #include "Engine/StaticMesh.h"
-#include "InstancedFoliageActor.h"
 #include "Engine/Brush.h"
 #include "Components/PrimitiveComponent.h"
 
 
 
-/*
-AInstancedFoliageActor* UAddToInstance::GetOrCreateIFA()
-{
-	//获取当前关卡
-	ULevel* CurrentLevel = GWorld->GetCurrentLevel();
-
-	//获取当前关卡中的IFA, 如果没有则自动创建一个
-	AInstancedFoliageActor* InstancedFoliageActor = AInstancedFoliageActor::GetInstancedFoliageActorForLevel(CurrentLevel, true);
-	return InstancedFoliageActor;
-	
-}
-*/
-
-
-
-bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, FGuid FoliageInstanceGuid, UStaticMesh* InStaticMesh, int32 StaticMeshIndex, FTransform Transform,  FString SavePath, TMap<AInstancedFoliageActor*, FGuid>& FoliageUUIDs)
+bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, TArray<AActor*> ActorsToIgnore, FGuid FoliageInstanceGuid, UStaticMesh* InStaticMesh, FTransform Transform,  FString SavePath, TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid>& FoliageUUIDs)
 {
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
-	
-	FVector StartLocation = Transform.GetLocation()+FVector(0.0f,0.0f,0.01f);
+
+	//如果有物体全部陷入地表，是无法转foliage成功的
+	float TreeBoundsZ = InStaticMesh->GetBoundingBox().Max.Z * Transform.GetScale3D().Z;
+	//UE_LOG(LogTemp,Warning,TEXT("TreeHeight是 ： %f"),TreeBoundsZ)
+	FVector StartLocation = Transform.GetLocation()+FVector(0.0f,0.0f,TreeBoundsZ);
 	FVector EndLocation = StartLocation - FVector(0.0f, 0.0f, 90000.0f);
 	FCollisionQueryParams CollisionParams;
 	CollisionParams.bTraceComplex = true;
+	CollisionParams.AddIgnoredActors(ActorsToIgnore);
 	FHitResult Hit;
 
 	ULevel* CurrentLevel = nullptr; 
 	UPrimitiveComponent* BaseComp = nullptr;
-	FVector HitLocation;
+
 	
-	bool bHit = World->LineTraceSingleByChannel(Hit, StartLocation, EndLocation, ECC_Visibility, CollisionParams,FCollisionResponseParams());
+	bool bHit = World->LineTraceSingleByChannel(Hit, StartLocation, EndLocation, ECC_WorldStatic, CollisionParams,FCollisionResponseParams());
 	if(bHit)
 	{
 		BaseComp = Hit.Component.Get();
 		CurrentLevel = Hit.GetActor()->GetLevel();
-		
-		//UE_LOG(LogTemp,Warning,TEXT("当前关卡为：%s"),*CurrentLevel->GetName());
 	}
 	else
 	{
 		UE_LOG(LogTemp,Error,TEXT("当前射线未击中任何物体！！！"));
 	}
-	DrawDebugLine(World,StartLocation,EndLocation,FColor::Red,false,5.0f,0,5.0f);
+	//DrawDebugLine(World,StartLocation,EndLocation,FColor::Red,false,5.0f,0,5.0f);
 	
 	AInstancedFoliageActor* InstancedFoliageActor = AInstancedFoliageActor::GetInstancedFoliageActorForLevel(CurrentLevel, true);
+	
 	//如果IFA不存在或者无效，返回false
 	if(!InstancedFoliageActor || !IsValid(InstancedFoliageActor))
 	{
@@ -69,7 +53,7 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, FGu
 		return false;
 	}
 
-///////////////////////////这一块写的比较乱////////////////////////////////////////
+///////////////////////////////////////////////////////////////////
 ///首先先去StaticMesh对应的文件夹里面找是否存在之前创建的FoliageType文件，如果存在就直接用，
 ///对应的路径有两种，一种是自定义路径，第二种是默认的路径为StaticMesh所在路径
 ///如果两个文件夹都没有对应StaticMesh_FoliageType文件，就使用InstancedFoliageActor->GetAllFoliageTypesForSource查找
@@ -263,16 +247,11 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, FGu
 
 			//刷新新指定的 InstancedFoliageActor 中的植被信息。
 			FoliageInfo->Refresh(true, true);
+			FoliageInfo->ClearSelection();
 
 			return true;
 			
-			
 		}
-		//Refresh Foliage Editor
-		//IFoliageEditModule& FoliageEditModule = FModuleManager::LoadModuleChecked<IFoliageEditModule>("FoliageEdit");
-		//FoliageEditModule.UpdateMeshList();
-		
-	
 		
 	}
 	return false;
@@ -280,7 +259,7 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, FGu
 }
 
 
-bool UAddToInstance::RemoveFoliageInstance(TMap<AInstancedFoliageActor*, FGuid> FoliageUUIDs)
+bool UAddToInstance::RemoveFoliageInstance(TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid> FoliageUUIDs)
 {
     //如果没有任何FoliageUUIDs，返回false
     if(FoliageUUIDs.Num() == 0)
@@ -292,16 +271,17 @@ bool UAddToInstance::RemoveFoliageInstance(TMap<AInstancedFoliageActor*, FGuid> 
     //遍历所有的FoliageUUIDs
     for(auto& FoliagePair : FoliageUUIDs)
     {
-        AInstancedFoliageActor* InstancedFoliageActor = FoliagePair.Key;
+    	TSoftObjectPtr<AInstancedFoliageActor> SoftIFA = FoliagePair.Key;
         FGuid FoliageInstanceUUID = FoliagePair.Value;
 
         //如果IFA不存在或者无效，返回false
-        if(!InstancedFoliageActor || !IsValid(InstancedFoliageActor))
+        if(!SoftIFA.IsValid() || !SoftIFA.Get())
         {
             UE_LOG(LogTemp,Error,TEXT("Can not find InstancedFoliageActor!!!"))
             continue;
         }
 
+    	AInstancedFoliageActor* InstancedFoliageActor = SoftIFA.Get();
         //遍历所有的FoliageInfos
         for (auto& FoliageInfoPair:InstancedFoliageActor->GetFoliageInfos())
         {

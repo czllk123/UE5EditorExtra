@@ -21,3 +21,4 @@ public:
 	UPROPERTY(EditAnywhere, Category="Parameters", DisplayName="权重")
 	float Weight = 1.0f;
 };
+

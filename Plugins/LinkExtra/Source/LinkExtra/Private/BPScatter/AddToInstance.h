@@ -19,23 +19,17 @@ class  UAddToInstance : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 public:
-	/*
-	UFUNCTION(BlueprintPure, Category= AddToFoliage)
-		static AInstancedFoliageActor* GetOrCreateIFA();
-*/
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category=AddToFoliage)
-		static bool AddToFoliageInstance(const UObject* WorldContextObject, FGuid FoliageInstanceGuid, UStaticMesh *InStaticMesh, int32 StaticMeshIndex, FTransform Transform,  FString SavePath, TMap<AInstancedFoliageActor*, FGuid>& FoliageUUIDs);
+		static bool AddToFoliageInstance(const UObject* WorldContextObject, TArray<AActor*> ActorsToIgnore, FGuid FoliageInstanceGuid, UStaticMesh *InStaticMesh, FTransform Transform,  FString SavePath, TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid>& FoliageUUIDs);
 
 	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
-		static bool RemoveFoliageInstance(TMap<AInstancedFoliageActor*, FGuid> FoliageUUIDs);
+		static bool RemoveFoliageInstance(TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid> FoliageUUIDs);
 
 	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
 		static TArray<int32> CalculateWeightAverage(const TArray<float>& Weights, int32 OutputSize);
 
 	static bool CheckInstanceLocationOverlap( FFoliageInfo* FoliageInfo,  FVector Location, float Tolerance = 0.1f);
-
-	//static TArray<ULandscapeLayerInfoObject*> GetAllLayerInfos(const ULandscapeInfo* LandscapeInfo);
 	
 
 };
