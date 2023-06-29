@@ -18,5 +18,7 @@ public:
 	virtual UClass* GetSupportedClass() const override;
 	virtual FColor  GetTypeColor() const override;
 	virtual uint32 GetCategories() override;
+private:
+	EAssetTypeCategories::Type FoliagePainterCategory;
      
 };

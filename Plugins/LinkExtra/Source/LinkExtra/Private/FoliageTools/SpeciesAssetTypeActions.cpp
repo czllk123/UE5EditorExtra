@@ -3,6 +3,7 @@
 
 #include "SpeciesAssetTypeActions.h"
 
+#include "FoliagePainterModule.h"
 #include "Species.h"
 
 FSpeciesAssetTypeActions::FSpeciesAssetTypeActions()
@@ -11,7 +12,7 @@ FSpeciesAssetTypeActions::FSpeciesAssetTypeActions()
 
 FText FSpeciesAssetTypeActions::GetName() const
 {
-	return  NSLOCTEXT("AssetTypeActions", "SpeciesAssetTypeActions", "Species");
+	return  NSLOCTEXT("AssetTypeActions", "SpeciesAssetTypeActions", "Species Asset");
 }
 
 UClass* FSpeciesAssetTypeActions::GetSupportedClass() const
@@ -26,5 +27,5 @@ FColor FSpeciesAssetTypeActions::GetTypeColor() const
 
 uint32 FSpeciesAssetTypeActions::GetCategories()
 {
-	return 12;
+	return FoliagePainterCategory;
 }
