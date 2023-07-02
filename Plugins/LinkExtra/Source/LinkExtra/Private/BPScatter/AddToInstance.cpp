@@ -2,16 +2,15 @@
 
 
 #include "AddToInstance.h"
-#include "AssetRegistryModule.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "ContentBrowserModule.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/Package.h"
 #include "Misc/Guid.h"
 #include "InstancedFoliageActor.h"
 #include "Engine/StaticMesh.h"
-#include "Engine/Brush.h"
 #include "Components/PrimitiveComponent.h"
-
+#include "UObject/SavePackage.h"
 
 
 bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, TArray<AActor*> ActorsToIgnore, FGuid FoliageInstanceGuid, UStaticMesh* InStaticMesh, FTransform Transform,  FString SavePath, TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid>& FoliageUUIDs)
@@ -26,6 +25,7 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, TAr
 	FCollisionQueryParams CollisionParams;
 	CollisionParams.bTraceComplex = true;
 	CollisionParams.AddIgnoredActors(ActorsToIgnore);
+	
 	FHitResult Hit;
 
 	ULevel* CurrentLevel = nullptr; 
@@ -126,7 +126,7 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, TAr
 		//这个地方别对这个foliageType做任何更改，只是将他创建出来用来撒点，最后将这个保存成foliageType文件，然后对它做相应的设置
 		
 		//创建一个新的空的资源包
-		UPackage* NewPackage  = CreatePackage(nullptr, *PackagePath);
+		UPackage* NewPackage  = CreatePackage(*PackagePath);
 		
 		// 加载资源包到内存
 		NewPackage->FullyLoad();
@@ -135,7 +135,6 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, TAr
 		{
 			//DuplicateObject函数创建一个新的 UFoliageType 对象，它将复制源 FoliageType 对象的属性和值，并且将outer更改为AssetPackage用于保存上面新建的FoliageType文件，在这个地方对FoliageType进行设置
 			UFoliageType* FoliageTypeAsset = DuplicateObject<UFoliageType>(FoliageType, NewPackage, *AssetName);
-
 			//设置FoliageType相关属性
 			FoliageTypeAsset->SetSource(InStaticMesh);
 			InstancedFoliageActor->AddFoliageType(FoliageTypeAsset);
@@ -152,7 +151,10 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, TAr
 			}
 			// 保存资产
 			FString FilePath = FString::Printf(TEXT("%s%s%s"), *FullPath, *AssetName, *FPackageName::GetAssetPackageExtension());
-			bool const bSaved = UPackage::SavePackage(NewPackage, FoliageTypeAsset, EObjectFlags::RF_Public | EObjectFlags::RF_Standalone, *FilePath);
+			FSavePackageArgs SaveArgs;
+			SaveArgs.TopLevelFlags = EObjectFlags::RF_Public | EObjectFlags::RF_Standalone;
+			SaveArgs.Error = GLog;
+			UPackage::SavePackage(NewPackage, FoliageTypeAsset, *FilePath, SaveArgs);
 
 		}
 	}
@@ -317,32 +319,60 @@ bool UAddToInstance::RemoveFoliageInstance(TMap<TSoftObjectPtr<AInstancedFoliage
     return true;
 }
 
-TArray<int32> UAddToInstance::CalculateWeightAverage(const TArray<float>& Weights, int32 OutputSize)
+TArray<int32> UAddToInstance::CalculateWeightAverage(const TArray<float>& Weights, int32 MeshCount)
 {
-	TArray<int32> result;
+	TArray<int32> Result;
 
 	// 计算权重总和
-	float sum_weights = 0.0f;
-	for (const float weight : Weights) {
-		sum_weights += weight;
+	float Sum_Weights = 0.0f;
+	for (const float Weight : Weights) {
+		Sum_Weights += Weight;
 	}
 
 	// 根据权重随机生成索引
-	for (int32 i = 0; i < OutputSize; i++) {
-		float rand_weight = FMath::RandRange(0.0f, sum_weights);
-		float accum_weight = 0.0f;
+	for (int32 i = 0; i < MeshCount; i++) {
+		float const Rand_Weight = FMath::RandRange(0.0f, Sum_Weights);
+		float Accum_Weight = 0.0f;
 
 		for (int32 j = 0; j < Weights.Num(); j++) {
-			accum_weight += Weights[j];
+			Accum_Weight += Weights[j];
 
-			if (rand_weight <= accum_weight) {
-				result.Add(j);
+			if (Rand_Weight <= Accum_Weight) {
+				Result.Add(j);
 				break;
 			}
 		}
 	}
 
-	return result;
+	return Result;
+}
+
+TArray<int32> UAddToInstance::CalculateWeightAverageWithStream(const TArray<float>& Weights, int32 MeshCount, const FRandomStream& Stream)
+{
+	TArray<int32> Result;
+
+	// 计算权重总和
+	float Sum_Weights = 0.0f;
+	for (const float Weight : Weights) {
+		Sum_Weights += Weight;
+	}
+
+	// 根据权重随机生成索引
+	for (int32 i = 0; i < MeshCount; i++) {
+		float const Rand_Weight = Stream.FRandRange(0.0f, Sum_Weights);
+		float Accum_Weight = 0.0f;
+
+		for (int32 j = 0; j < Weights.Num(); j++) {
+			Accum_Weight += Weights[j];
+
+			if (Rand_Weight <= Accum_Weight) {
+				Result.Add(j);
+				break;
+			}
+		}
+	}
+
+	return Result;
 }
 
 // 检查是否已经存在具有相同位置的实例
@@ -357,6 +387,113 @@ bool UAddToInstance::CheckInstanceLocationOverlap( FFoliageInfo* FoliageInfo,  F
 	}
 	return false;
 }
+
+//从FoliageType中拿到StaticMesh 和 重载的材质
+UStaticMesh* UAddToInstance::OverrideMaterialsFromFT(UFoliageType* InputFoliageType)
+{
+	if(InputFoliageType == nullptr)
+	{
+		return nullptr;
+	}
+
+	//类型强转
+	UFoliageType_InstancedStaticMesh* FTISM = Cast<UFoliageType_InstancedStaticMesh>(InputFoliageType);
+	
+	if (FTISM == nullptr)
+	{
+		return nullptr;
+	}
+
+	//获取StaticMesh
+	 UStaticMesh* Mesh = FTISM->GetStaticMesh();
+	
+	if (Mesh == nullptr)
+	{
+		return nullptr;
+	}
+
+	//申明空指针
+	UStaticMesh *NewMesh = nullptr;
+
+	// 判断 OverrideMaterials 数组是否包含至少一个非 nullptr 元素。
+	if(FTISM->OverrideMaterials.Num()>0)
+	{
+		bool bHasNonNullOverrideMaterial = false;
+		for(auto& material : FTISM -> OverrideMaterials)
+		{
+			if( material != nullptr)
+			{
+				bHasNonNullOverrideMaterial = true;
+				break;
+			}
+		}
+		// 如果有非 nullptr 的重载材质，则复制 Mesh 并应用新材质。
+		if(bHasNonNullOverrideMaterial)
+		{
+			NewMesh = DuplicateObject<UStaticMesh>(Mesh, GetTransientPackage());
+			for(int32 i = 0; i < FTISM->OverrideMaterials.Num(); i++)
+			{
+				if(FTISM->OverrideMaterials[i] != nullptr)
+				{
+					NewMesh->GetStaticMaterials()[i].MaterialInterface = FTISM->OverrideMaterials[i];
+				}
+			}
+		}
+	}
+	// 如果 NewMesh 不是 nullptr，则返回 NewMesh，否则返回原始 Mesh。
+	return NewMesh != nullptr ? NewMesh : Mesh;
+}
+
+TMap<UMaterialInterface*, UStaticMesh*> UAddToInstance::GetOverrideResourceFromFT(UFoliageType* InputFoliageType)
+{
+	TMap<UMaterialInterface*, UStaticMesh*> OverrideResources;
+	
+	if(InputFoliageType == nullptr)
+	{
+		return OverrideResources;
+	}
+
+	UFoliageType_InstancedStaticMesh* FTISM = Cast<UFoliageType_InstancedStaticMesh>(InputFoliageType);
+	if(FTISM == nullptr)
+	{
+		return OverrideResources;
+	}
+
+	//获取FoliageType中的StaticMesh
+	const UStaticMesh* Mesh = FTISM->GetStaticMesh();
+
+	if(Mesh == nullptr)
+	{
+		return OverrideResources;
+	}
+
+	if(FTISM->OverrideMaterials.Num()> 0)
+	{
+		for(int32 i=0; i<FTISM->OverrideMaterials.Num() && i<Mesh->GetStaticMaterials().Num(); i++)
+		{
+			UMaterialInterface* OverrideMaterial = FTISM->OverrideMaterials[i];
+			// 检查OverrideMaterial是否为空 同时确保遍历material时不会造成数组越界
+			if(OverrideMaterial == nullptr && Mesh->GetStaticMaterials().Num()>i)
+			{
+				// 使用StaticMesh的默认材质
+				OverrideMaterial = Mesh->GetStaticMaterials()[i].MaterialInterface;
+			}
+			// 用选定的材质（覆盖或默认）更新TMap
+			if(OverrideMaterial != nullptr)
+			{
+				OverrideResources.Add(OverrideMaterial, const_cast<UStaticMesh*>(Mesh));
+			}
+		}
+			
+	}
+	return OverrideResources;
+}
+
+
+void UAddToInstance::SetOverrideMaterialsWithComponent(UPrimitiveComponent* PrimitiveComponent, TMap<UStaticMesh*, UMaterialInterface*> Materilas)
+{
+}
+
 
 
 

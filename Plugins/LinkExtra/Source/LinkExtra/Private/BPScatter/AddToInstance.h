@@ -5,8 +5,7 @@
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "InstancedFoliage.h"
-#include "LandscapeInfo.h"
-#include "LandscapeLayerInfoObject.h"
+#include "Materials/Material.h"
 #include "AddToInstance.generated.h"
 
 /**
@@ -21,15 +20,27 @@ class  UAddToInstance : public UBlueprintFunctionLibrary
 public:
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category=AddToFoliage)
-		static bool AddToFoliageInstance(const UObject* WorldContextObject, TArray<AActor*> ActorsToIgnore, FGuid FoliageInstanceGuid, UStaticMesh *InStaticMesh, FTransform Transform,  FString SavePath, TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid>& FoliageUUIDs);
+		static bool AddToFoliageInstance(const UObject* WorldContextObject, TArray<AActor*> ActorsToIgnore, FGuid FoliageInstanceGuid, UStaticMesh *InStaticMesh, FTransform Transform,  FString SavePath,
+			TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid>& FoliageUUIDs);
 
 	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
 		static bool RemoveFoliageInstance(TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid> FoliageUUIDs);
 
 	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
-		static TArray<int32> CalculateWeightAverage(const TArray<float>& Weights, int32 OutputSize);
+		static TArray<int32> CalculateWeightAverage(const TArray<float>& Weights, int32 MeshCount);
+
+	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
+		static TArray<int32> CalculateWeightAverageWithStream(const TArray<float>& Weights, int32 MeshCount, const FRandomStream& Stream);
 
 	static bool CheckInstanceLocationOverlap( FFoliageInfo* FoliageInfo,  FVector Location, float Tolerance = 0.1f);
+
+	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
+		static UStaticMesh* OverrideMaterialsFromFT(UFoliageType* InputFoliageType);
 	
+	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
+	static TMap< UMaterialInterface*, UStaticMesh*> GetOverrideResourceFromFT(UFoliageType* InputFoliageType);
+
+	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
+	static void SetOverrideMaterialsWithComponent(UPrimitiveComponent* PrimitiveComponent, TMap<UStaticMesh*, UMaterialInterface*> Materilas);
 
 };
