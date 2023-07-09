@@ -20,8 +20,7 @@ class  UAddToInstance : public UBlueprintFunctionLibrary
 public:
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category=AddToFoliage)
-		static bool AddToFoliageInstance(const UObject* WorldContextObject, TArray<AActor*> ActorsToIgnore, FGuid FoliageInstanceGuid, UStaticMesh *InStaticMesh, FTransform Transform,  FString SavePath,
-			TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid>& FoliageUUIDs);
+		static bool AddToFoliageInstance(const UObject* WorldContextObject, TArray<AActor*> ActorsToIgnore, FGuid FoliageInstanceGuid, UFoliageType* InFoliageType, FTransform Transform, TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid>& FoliageUUIDs);
 
 	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
 		static bool RemoveFoliageInstance(TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid> FoliageUUIDs);
@@ -40,7 +39,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
 	static TMap< UMaterialInterface*, UStaticMesh*> GetOverrideResourceFromFT(UFoliageType* InputFoliageType);
 
-	UFUNCTION(BlueprintCallable, Category=AddToFoliage)
-	static void SetOverrideMaterialsWithComponent(UPrimitiveComponent* PrimitiveComponent, TMap<UStaticMesh*, UMaterialInterface*> Materilas);
+
 
 };

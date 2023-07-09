@@ -2,22 +2,22 @@
 
 
 #include "AddToInstance.h"
-#include "AssetRegistry/AssetRegistryModule.h"
-#include "ContentBrowserModule.h"
+
 #include "UObject/UObjectGlobals.h"
 #include "UObject/Package.h"
 #include "Misc/Guid.h"
 #include "InstancedFoliageActor.h"
 #include "Engine/StaticMesh.h"
 #include "Components/PrimitiveComponent.h"
-#include "UObject/SavePackage.h"
 
 
-bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, TArray<AActor*> ActorsToIgnore, FGuid FoliageInstanceGuid, UStaticMesh* InStaticMesh, FTransform Transform,  FString SavePath, TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid>& FoliageUUIDs)
+
+bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, TArray<AActor*> ActorsToIgnore, FGuid FoliageInstanceGuid,  UFoliageType* InFoliageType, FTransform Transform, TMap<TSoftObjectPtr<AInstancedFoliageActor>, FGuid>& FoliageUUIDs)
 {
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
 
 	//如果有物体全部陷入地表，是无法转foliage成功的
+	UStaticMesh* InStaticMesh = Cast<UStaticMesh>(InFoliageType->GetSource());
 	float TreeBoundsZ = InStaticMesh->GetBoundingBox().Max.Z * Transform.GetScale3D().Z;
 	//UE_LOG(LogTemp,Warning,TEXT("TreeHeight是 ： %f"),TreeBoundsZ)
 	FVector StartLocation = Transform.GetLocation()+FVector(0.0f,0.0f,TreeBoundsZ);
@@ -52,7 +52,7 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, TAr
 		UE_LOG(LogTemp,Error,TEXT("Can not find InstancedFoliageActor!!!"))
 		return false;
 	}
-
+/*
 ///////////////////////////////////////////////////////////////////
 ///首先先去StaticMesh对应的文件夹里面找是否存在之前创建的FoliageType文件，如果存在就直接用，
 ///对应的路径有两种，一种是自定义路径，第二种是默认的路径为StaticMesh所在路径
@@ -164,30 +164,23 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, TAr
 		//如果StaticMesh指向的FoliageType已经存在或者存在多个，那就用第一个。
 		FoliageType = const_cast<UFoliageType*>(FoliageTypes[0]);
 	}
+*/
 
-	//设置FoliageType相关属性
-	//FoliageType->SetSource(InStaticMesh);
-	//InstancedFoliageActor->AddFoliageType(FoliageType);
-	FFoliageInfo* FoliageInfo = InstancedFoliageActor->FindInfo(FoliageType);
+
 
 	
-	if (!FoliageInfo)
-	{
-		// 添加新的FoliageType到InstancedFoliageActor中，并返回对应的FoliageInfo
+	//设置FoliageType相关属性
+	InFoliageType->SetSource(InStaticMesh);
+	InstancedFoliageActor->AddFoliageType(InFoliageType);
+	FFoliageInfo* FoliageInfo = InstancedFoliageActor->FindInfo(InFoliageType);
 
-		FoliageType->SetSource(InStaticMesh);
-		InstancedFoliageActor->AddFoliageType(FoliageType);
-		FoliageInfo = InstancedFoliageActor->FindInfo(FoliageType);
-		UE_LOG(LogTemp, Warning, TEXT("No FFoliageInfo found for this UFoliageType."));
-		
-	}
 
 	//如果找到了FoliageInfo
 	if(FoliageInfo)
 	{
 		
 		FFoliageInstance* FoliageInstance = new FFoliageInstance;
-		FoliageInfo->AddInstance(FoliageType, *FoliageInstance);
+		FoliageInfo->AddInstance(InFoliageType, *FoliageInstance);
 
 		if(FoliageInstance)
 		{
@@ -199,24 +192,6 @@ bool UAddToInstance::AddToFoliageInstance(const UObject* WorldContextObject, TAr
 
 
 			FoliageInfo->PreMoveInstances({FoliageInstanceIndex});
-
-			
-			//FoliageInstance->Location = Transform.GetLocation();
-
-			//此处调用CheckInstanceLocationOverlap函数，检查在容差范围内是否有相同的实例要放置
-			//现在先用这种方法检测，之后用SphereOverlapActors()
-			/*
-			FVector InstanceLocation = Transform.GetLocation();
-			
-			//设置位置检测容差值
-			float Tolerance = 10.0f;
-			if(CheckInstanceLocationOverlap(FoliageInfo, InstanceLocation, Tolerance))
-			{
-				// 位置已经存在实例，不要添加新实例
-				UE_LOG(LogTemp,Error,TEXT("Instance already exists at the current location, No need to add !!!"))
-				return false;
-			}
-			*/
 
 			
 			// 设置Foliage Instance的位置、旋转和缩放
@@ -489,10 +464,6 @@ TMap<UMaterialInterface*, UStaticMesh*> UAddToInstance::GetOverrideResourceFromF
 	return OverrideResources;
 }
 
-
-void UAddToInstance::SetOverrideMaterialsWithComponent(UPrimitiveComponent* PrimitiveComponent, TMap<UStaticMesh*, UMaterialInterface*> Materilas)
-{
-}
 
 
 
