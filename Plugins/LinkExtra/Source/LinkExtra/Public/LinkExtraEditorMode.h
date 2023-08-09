@@ -32,5 +32,5 @@ public:
 	virtual void Enter() override;
 	virtual void ActorSelectionChangeNotify() override;
 	virtual void CreateToolkit() override;
-	virtual TMap<FName, TArray<TSharedPtr<FUICommandInfo>>> GetModeCommands() const override;
+	//virtual TMap<FName, TArray<TSharedPtr<FUICommandInfo>>> GetModeCommands() const override;
 };

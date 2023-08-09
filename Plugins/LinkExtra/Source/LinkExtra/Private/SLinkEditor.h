@@ -24,11 +24,11 @@ public:
 
 	/** Constructs this widget with InArgs */
 	//根据传入的参数和父工具包（FLinkExtraEditorModeToolkit）实例构造该控件。
-	void Construct(const FArguments& InArgs, TShaderRef<FLinkExtraEditorModeToolkit> InParentToolkit);
+	//void Construct(const FArguments& InArgs, TShaderRef<FLinkExtraEditorModeToolkit> InParentToolkit);
 
 private:
-	TSharedPtr<IDetailsView> ToolDetailsView_MaskPainterComponent;//成员变量 -> 用于显示LandscapeMask相关的详细信息视图。
-	TSharedPtr<IDetailsView> ToolDetailsView_FoliagePainter;//成员变量 -> 用于显示  Mask Paint Component相关的详细信息视图。
+	//<IDetailsView> ToolDetailsView_MaskPainterComponent;//成员变量 -> 用于显示LandscapeMask相关的详细信息视图。
+	//TSharedPtr<IDetailsView> ToolDetailsView_FoliagePainter;//成员变量 -> 用于显示  Mask Paint Component相关的详细信息视图。
 
 	//两个点击事件
 	void OnClickMaskPainterComponentBtn();

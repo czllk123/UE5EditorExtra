@@ -63,7 +63,7 @@ void ULinkExtraEditorMode::Enter()
 	//RegisterTool(SampleToolCommands.InteractiveTool, InteractiveToolName, NewObject<ULinkExtraInteractiveToolBuilder>(this));
 
 	// active tool type is not relevant here, we just set to default
-	GetToolManager()->SelectActiveToolType(EToolSide::Left, SimpleToolName);
+	//GetToolManager()->SelectActiveToolType(EToolSide::Left, SimpleToolName);
 }
 
 void ULinkExtraEditorMode::CreateToolkit()
@@ -71,9 +71,6 @@ void ULinkExtraEditorMode::CreateToolkit()
 	Toolkit = MakeShareable(new FLinkExtraEditorModeToolkit);
 }
 
-TMap<FName, TArray<TSharedPtr<FUICommandInfo>>> ULinkExtraEditorMode::GetModeCommands() const
-{
-	return FLinkExtraEditorModeCommands::Get().GetCommands();
-}
+
 
 #undef LOCTEXT_NAMESPACE
