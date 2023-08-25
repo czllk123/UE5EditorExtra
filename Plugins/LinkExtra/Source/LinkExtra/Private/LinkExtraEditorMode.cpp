@@ -71,6 +71,11 @@ void ULinkExtraEditorMode::CreateToolkit()
 	Toolkit = MakeShareable(new FLinkExtraEditorModeToolkit);
 }
 
+TSharedRef<FUICommandList> ULinkExtraEditorMode::GetUICommandList() const
+{
+	check(Toolkit.IsValid());
+	return Toolkit->GetToolkitCommands();
+}
 
 
 #undef LOCTEXT_NAMESPACE

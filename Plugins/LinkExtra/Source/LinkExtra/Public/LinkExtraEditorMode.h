@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Tools/UEdMode.h"
+#include "EdMode.h"
 #include "LinkExtraEditorMode.generated.h"
 
 /**
@@ -33,4 +34,11 @@ public:
 	virtual void ActorSelectionChangeNotify() override;
 	virtual void CreateToolkit() override;
 	//virtual TMap<FName, TArray<TSharedPtr<FUICommandInfo>>> GetModeCommands() const override;
+	TSharedRef<FUICommandList> GetUICommandList() const;
+};
+
+class FEdModeLandscape : public  FEdMode
+{
+public:
+	
 };

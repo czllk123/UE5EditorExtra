@@ -31,7 +31,9 @@ void FLinkExtraEditorModeCommands::RegisterCommands()
 	NameToCommandMap.Add("ToolMode_Sculpt", FoliageMode);
 	UI_COMMAND(WaterMode, "Mode - Water", "", EUserInterfaceActionType::RadioButton, FInputChord());
 	NameToCommandMap.Add("ToolMode_Paint", WaterMode);
-	
+
+	UI_COMMAND(PaintTool, "Paint", "Paint Mask data.\n\nCtrl+Click to paint, Ctrl+Shift+Click to erase.", EUserInterfaceActionType::RadioButton, FInputChord());
+	NameToCommandMap.Add("Tool_Paint", PaintTool);
 }
 
 #undef LOCTEXT_NAMESPACE

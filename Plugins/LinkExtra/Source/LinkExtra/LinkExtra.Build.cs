@@ -46,7 +46,8 @@ public class LinkExtra : ModuleRules
 				"InteractiveToolsFramework",
 				"EditorInteractiveToolsFramework", 
 				"Foliage", 
-				"FoliageEdit"
+				"FoliageEdit", 
+				"Niagara"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
