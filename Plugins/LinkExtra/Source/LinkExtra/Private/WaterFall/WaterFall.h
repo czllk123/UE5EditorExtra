@@ -20,14 +20,23 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "WaterFall")
 	USceneComponent* SceneRoot;
 	
-	UPROPERTY(EditAnywhere, Category = "WaterFall")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
 	UNiagaraComponent* Niagara;
 
-	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaterFall")
+	AWaterFall* WaterFall;
+
+	UFUNCTION(BlueprintCallable, Category = "WaterFall")
+	void ToggleTick();
 
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	
+	bool bIsTicking = false; 
+
+
+
 
 public:
 	// Called every frame

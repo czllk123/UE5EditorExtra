@@ -26,6 +26,12 @@ public class LinkExtra : ModuleRules
 			new string[]
 			{
 				"Core",
+				"CoreUObject",
+				"Engine",
+				"InputCore",
+				"UnrealEd",
+				"PropertyEditor",
+				"Niagara"
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
