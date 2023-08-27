@@ -51,7 +51,7 @@ void WaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 	.ValueContent()
 	[
 		SNew(SButton)
-		.Text(FText::FromString("Toggle Tick"))
+		.Text(FText::FromString("Start Tick"))
 		.OnClicked_Lambda([this]() -> FReply
 		{
 			if(this->WaterFall.IsValid()) // 确保WaterFall不是nullptr

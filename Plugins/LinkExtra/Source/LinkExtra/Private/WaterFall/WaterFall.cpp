@@ -18,6 +18,8 @@ AWaterFall::AWaterFall()
 	Niagara = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
 	Niagara->SetupAttachment(RootComponent);
 
+	BoxCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxCollision"));
+	BoxCollision->SetupAttachment(RootComponent);
 }
 
 // Called when the game starts or when spawned
@@ -34,10 +36,13 @@ void AWaterFall::ToggleTick()
 	if(bIsTicking)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Tick is now enabled"));
+		Niagara->SetPaused(false);
+		Niagara->Activate(true);
 	}
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Tick is now disabled"));
+		Niagara->Deactivate();
 	}
 }
 
@@ -45,12 +50,13 @@ void AWaterFall::ToggleTick()
 void AWaterFall::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	if(bIsTicking || Niagara->IsActive())
+	if(bIsTicking )
 	{
+		UE_LOG(LogTemp, Warning, TEXT("I am here !!!"));
 		if(Niagara)
 		{
 			UNiagaraDataInterface* DataInterface = Niagara->GetDataInterface(TEXT("Niagara"));
-			UE_LOG(LogTemp, Warning, TEXT("I am here !!!"));
+			
 		}
 	}
 

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "NiagaraComponent.h"
+#include "Components/BoxComponent.h"
 #include "WaterFall.generated.h"
 
 UCLASS(ClassGroup=(Custom), HideCategories=(Tags,AssetUserData, Rendering, Physics,
@@ -26,9 +27,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaterFall")
 	AWaterFall* WaterFall;
 
-	UFUNCTION(BlueprintCallable, Category = "WaterFall")
+	UFUNCTION(BlueprintCallable , Category = "WaterFall")
 	void ToggleTick();
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
+	UBoxComponent* BoxCollision;
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
