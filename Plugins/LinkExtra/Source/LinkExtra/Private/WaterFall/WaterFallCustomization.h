@@ -9,11 +9,16 @@
 class WaterFallCustomization :public IDetailCustomization
 {
 public:
+	/* Makes a new instance of this detail layout class for a specific detail view requesting it */
 	static TSharedRef<IDetailCustomization> MakeInstance();
+	
+	/* IDetalCustomization interface */
 	virtual void CustomizeDetails(IDetailLayoutBuilder& DetailBuilder) override;
 
-	//FReply OnClickTick();
+	FText ButtonText() const;
 private:
-	TWeakObjectPtr<AWaterFall> WaterFall;
+	/* Contains references to all selected objects inside in the viewport */
+	TArray<TWeakObjectPtr<UObject>> SelectedObjects;
+	
 };
 #endif

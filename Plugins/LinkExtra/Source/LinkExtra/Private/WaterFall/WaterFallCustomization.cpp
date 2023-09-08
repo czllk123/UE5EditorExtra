@@ -18,51 +18,94 @@ TSharedRef<IDetailCustomization> WaterFallCustomization::MakeInstance()
 }
 
 
-TWeakObjectPtr<AWaterFall> WaterFall;
+
 void WaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuilder)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Starting to check selected actors..."));
-	// 初始化为nullptr
-	AWaterFall* SelectedWaterFall = nullptr;
-
 	
-	// Get the current Level Editor Selection
-	USelection* SelectedActors = GEditor->GetSelectedActors();
-	for (FSelectionIterator Iter(*SelectedActors); Iter; ++Iter)
-	{
-		AActor* Selected = Cast<AActor>(*Iter);
-		if (Selected)
-		{
-			SelectedWaterFall = Cast<AWaterFall>(Selected);
-			if (SelectedWaterFall)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("Selected Actor %s"), *SelectedWaterFall->GetName());
-				break;  // 如果找到了，退出循环
-			}
-		}
-	}
-
-	// 将找到的实例保存到成员变量中
-
-	this->WaterFall = SelectedWaterFall;
-
+	//Edits a category. If it doesn't exist it creates a new one
 	IDetailCategoryBuilder& WaterFallCategory = DetailBuilder.EditCategory("WaterFall", FText::GetEmpty(), ECategoryPriority::Important);
+
+	//Store the currently selected objects from the viewport to the SelectedObjects array.
+	DetailBuilder.GetObjectsBeingCustomized(SelectedObjects);
+	WaterFallCategory.SetSortOrder(1);
+	WaterFallCategory.InitiallyCollapsed(false);
+	
+	//Adding a custom row
 	WaterFallCategory.AddCustomRow(FText::GetEmpty())
 	.ValueContent()
+	.VAlign(EVerticalAlignment::VAlign_Center)
+	.HAlign(EHorizontalAlignment::HAlign_Center)
+	.MaxDesiredWidth(500)
 	[
 		SNew(SButton)
-		.Text(FText::FromString("Start Tick"))
+		.VAlign(VAlign_Fill)
+		.HAlign(HAlign_Center)
+		//.Text(FText::FromString("Simulate"))
 		.OnClicked_Lambda([this]() -> FReply
 		{
-			if(this->WaterFall.IsValid()) // 确保WaterFall不是nullptr
+			
+			for(const TWeakObjectPtr<UObject>& Object : SelectedObjects)
+			{
+				AWaterFall* WaterFallActor = Cast<AWaterFall>(Object.Get());
+				/*
+				if(WaterFallActor->bSimulateValid)
 				{
-					this->WaterFall->ToggleTick(); // 调用AWaterFall内定义的ToggleTick方法
-					return FReply::Handled();
+					WaterFallActor->StartGenerateSpline();
 				}
-				return FReply::Unhandled();
-			})
-		];
-	UE_LOG(LogTemp, Warning, TEXT("Finished checking selected actors."));
+				
+				else
+				{
+					WaterFallActor->StopGenerateSpline();
+				}
+				*/
+				for(UActorComponent* AC : WaterFallActor ->GetComponents())
+				{
+					UNiagaraComponent* NiagaraComponent = Cast<UNiagaraComponent>(AC);
+					if(NiagaraComponent)
+						if(WaterFallActor->bSimulateValid)
+						{
+							NiagaraComponent->Activate(true);
+							NiagaraComponent->ReregisterComponent();
+						
+							WaterFallActor->StartGenerateSpline();	
+						}
+						else 
+						{
+							NiagaraComponent->SetPaused(true);
+							NiagaraComponent->ReregisterComponent();
+							WaterFallActor->StopGenerateSpline();
+						}
+				}
+				
+			}
+			return FReply::Handled();
+		})
+			.Content()
+				[
+					SNew(STextBlock)
+					.Text_Raw(this, &WaterFallCustomization::ButtonText)
+				]
+	];
+
+}
+
+FText WaterFallCustomization::ButtonText() const 
+{
+	FString TempCaption;
+	for(const TWeakObjectPtr<UObject>& Object : SelectedObjects)
+	{
+		AWaterFall* WaterFallActor = Cast<AWaterFall>(Object.Get());
+		if(WaterFallActor->GetSimulateStateValue() == EWaterFallButtonState::Stop)
+		{
+			TempCaption = "Stop";
+		}
+		else
+		{
+			TempCaption = "Simulate";
+		}
+		
+	}
+	return FText::FromString(TempCaption);
 }
 
 #endif

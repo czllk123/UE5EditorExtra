@@ -1,0 +1,35 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "Crazy Ivy",
+	"Description": "Auto Ivy Generation",
+	"Category": "Other",
+	"CreatedBy": "Tav Shande",
+	"CreatedByURL": "https://www.crazyivy.com",
+	"DocsURL": "https://docs.google.com/document/d/1O_4JKFqRphRsLSxBlI2xi5o1kH9-ln9JgkU0IVA-KJ8/edit?usp=sharing",
+	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/971d1e04329945cb8c6028fa5578287c",
+	"SupportURL": "https://www.crazyivy.com",
+	"EngineVersion": "5.2.0",
+	"CanContainContent": true,
+	"Installed": true,
+	"Modules": [
+		{
+			"Name": "CrazyIvy",
+			"Type": "Editor",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64"
+			],
+			"AdditionalDependencies": [
+				"EditorScriptingUtilities"
+			]
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "EditorScriptingUtilities",
+			"Enabled": true
+		}
+	]
+}

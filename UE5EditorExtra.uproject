@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "{A4AEDF6E-4669-55E4-6F2C-6C9870533418}",
+	"EngineAssociation": "{E47F4334-42A1-40E9-3BDA-0882E72E91C3}",
 	"Category": "",
 	"Description": "",
 	"Modules": [
@@ -45,6 +45,23 @@
 		{
 			"Name": "HouTuEngine",
 			"Enabled": true
+		},
+		{
+			"Name": "ExampleCustomDataInterface",
+			"Enabled": true
+		},
+		{
+			"Name": "NiagaraFluids",
+			"Enabled": true
+		},
+		{
+			"Name": "NiagaraSimCaching",
+			"Enabled": true
+		},
+		{
+			"Name": "CrazyIvy",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/971d1e04329945cb8c6028fa5578287c"
 		}
 	]
 }
