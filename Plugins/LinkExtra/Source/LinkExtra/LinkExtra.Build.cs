@@ -31,7 +31,9 @@ public class LinkExtra : ModuleRules
 				"InputCore",
 				"UnrealEd",
 				"PropertyEditor",
-				"Niagara"
+				"Niagara",
+				"NiagaraEditor"
+
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -53,7 +55,8 @@ public class LinkExtra : ModuleRules
 				"EditorInteractiveToolsFramework", 
 				"Foliage", 
 				"FoliageEdit", 
-				"Niagara"
+				"Niagara",
+				"NiagaraEditor"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

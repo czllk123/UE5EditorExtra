@@ -6,12 +6,14 @@
 #include "GameFramework/Actor.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystemInstance.h"
-#include "NiagaraDataInterface.h"
-#include "NiagaraDataInterfaceExport.h"
+#include "NiagaraEmitterInstance.h"
 #include "Components/BoxComponent.h"
+#include "NiagaraComputeExecutionContext.h"
+#include "NiagaraDataSetDebugAccessor.h"
 #include "WaterFall.generated.h"
 
-class FNiagaraSystemInstance;
+//class FNiagaraDataSet;
+
 
 
 UENUM()
@@ -21,9 +23,7 @@ enum EWaterFallButtonState
     Stop     UMETA(DisplayName = "Stop"),
 };
 
-
-
-
+//建立结构体用来储存获取到的粒子信息，里面的每一项都要和下面ParticlesVariables相对应
 USTRUCT(BlueprintType)
 struct FParticleData
 {
@@ -38,18 +38,34 @@ struct FParticleData
 	UPROPERTY(BlueprintReadOnly)
 	FVector Velocity;
 
+	UPROPERTY(BlueprintReadOnly)
+	float Age;
+
 	FParticleData()
-		: UniqueID(0), Position(FVector::ZeroVector), Velocity(FVector::ZeroVector)
+		: UniqueID(0), Position(FVector::ZeroVector), Velocity(FVector::ZeroVector), Age(0.0f)
 	{
 	}
 };
 
+
+
+
+
 UCLASS(ClassGroup=(Custom), HideCategories=(Tags,AssetUserData, Rendering, Physics,
 	Activation, Collision, Cooking, HLOD, Networking, Input, LOD, Actor,Replication))
-class LINKEXTRA_API AWaterFall : public AActor, public INiagaraParticleCallbackHandler
+class LINKEXTRA_API AWaterFall : public AActor
 {
 	GENERATED_BODY()
 	friend class WaterFallCustomization;
+	//friend class FNiagaraDebugHud;
+
+	typedef TSharedPtr<class FNiagaraDataSetReadback, ESPMode::ThreadSafe> FGpuDataSetPtr;
+	struct FGpuEmitterCache
+	{
+		uint64					LastAccessedCycles;
+		TArray<FGpuDataSetPtr>	CurrentEmitterData;
+		TArray<FGpuDataSetPtr>	PendingEmitterData;
+	};
 
 public:
 	// Sets default values for this actor's properties
@@ -69,7 +85,10 @@ public:
 
 	UPROPERTY(Category="Simulate",BlueprintReadWrite)
 	bool bSimulateValid = true;
-
+	
+	//要获取的粒子的信息
+	TArray<FString> ParticlesVariables = {"UniqueID","Position",  "Velocity", "Age"};
+	
 	EWaterFallButtonState GetSimulateStateValue(){ return SimulateState;}
 	
 protected:
@@ -92,10 +111,14 @@ protected:
 	void ResetParmaters();
 
 private:
+	TMap<FNiagaraSystemInstanceID, FGpuEmitterCache> GpuEmitterData;
+	
 	EWaterFallButtonState SimulateState = EWaterFallButtonState :: Simulate;
-
+	const FNiagaraDataSet* GetParticleDataSet(class FNiagaraSystemInstance* SystemInstance, class FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter);
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
+	
+
 };
 
