@@ -8,7 +8,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystemSimulation.h"
 #include "NiagaraDataSetReadback.h"
-
+#include "CustomNiagaraDataSetAccessor.h"
 #include "NiagaraDataSet.h"
 #include "NiagaraDataSetDebugAccessor.h"
 
@@ -48,14 +48,19 @@ void AWaterFall::BeginPlay()
 	
 }
 
+struct FCachedVariables
+{
+	TArray<TArray<FNiagaraDataSetDebugAccessor>> ParticlesVariables;
+	
+};
+
+FCachedVariables CachedVariables;
 
 
 
-TArray<TArray<FNiagaraDataSetDebugAccessor>>		ParticleVariables;	
-ParticleVariables.Add(TArray<FNiagaraDataSetDebugAccessor>{ "UniqueID"});
-ParticleVariables.Add(TArray<FNiagaraDataSetDebugAccessor>{ /* 初始化 Position 相关的 Debug Accessors */ });
-ParticleVariables.Add(TArray<FNiagaraDataSetDebugAccessor>{ /* 初始化 Velocity 相关的 Debug Accessors */ });
-ParticleVariables.Add(TArray<FNiagaraDataSetDebugAccessor>{ /* 初始化 Age 相关的 Debug Accessors */ });
+
+
+
 
 
 
@@ -69,7 +74,7 @@ void AWaterFall::StartGenerateSpline()
 	
 	if(!Niagara->IsActive())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Niagara组件没有激活！"));
+		//UE_LOG(LogTemp, Warning, TEXT("Niagara组件没有激活！"));
 		return;
 	}
 	
@@ -115,6 +120,8 @@ void AWaterFall::StartGenerateSpline()
 		}
 
 		const FNiagaraDataBuffer* DataBuffer = ParticleDataSet->GetCurrentData();
+		const FNiagaraDataSetCompiledData& CompiledData = ParticleDataSet->GetCompiledData();
+		
 		if(!DataBuffer || !DataBuffer->GetNumInstances())
 		{
 			continue;
@@ -122,14 +129,14 @@ void AWaterFall::StartGenerateSpline()
 		
 		for(uint32 iInstance = 0; iInstance < DataBuffer->GetNumInstances(); ++ iInstance)
 		{
-			TStringBuilder<1024> StringBuilder;
-			TArray<FParticleData> ParticleDataArray;
-			for(const auto& ParticleVariables: ParticlesVariables)
+
+			for(const auto& ParticleVar : ParticlesVariables)
 			{
-				FParticleData ParticleData;
-				ParticleVariables.StringAppend(StringBuilder, DataBuffer, iInstance);
-				//ParticleData.UniqueID = SomeFunctionToGetUniqueID(iInstance, DataBuffer);
+				//auto& TempInfo = GetParticleInfoFromDataBuffer(CompiledData,DataBuffer, ParticleVar);
+				//ParticleDataArray.Add(TempInfo);
 			}
+			
+
 		}
 		
 	}

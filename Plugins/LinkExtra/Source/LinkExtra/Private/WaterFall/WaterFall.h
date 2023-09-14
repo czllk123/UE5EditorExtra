@@ -57,6 +57,7 @@ class LINKEXTRA_API AWaterFall : public AActor
 {
 	GENERATED_BODY()
 	friend class WaterFallCustomization;
+	friend class CustomNiagaraDataSetAccessor;
 	//friend class FNiagaraDebugHud;
 
 	typedef TSharedPtr<class FNiagaraDataSetReadback, ESPMode::ThreadSafe> FGpuDataSetPtr;
@@ -87,7 +88,7 @@ public:
 	bool bSimulateValid = true;
 	
 	//要获取的粒子的信息
-	TArray<FString> ParticlesVariables = {"UniqueID","Position",  "Velocity", "Age"};
+	TArray<FName> ParticlesVariables = {"UniqueID","Position",  "Velocity", "Age"};
 	
 	EWaterFallButtonState GetSimulateStateValue(){ return SimulateState;}
 	
@@ -111,10 +112,15 @@ protected:
 	void ResetParmaters();
 
 private:
+	EWaterFallButtonState SimulateState = EWaterFallButtonState :: Simulate;
+	
 	TMap<FNiagaraSystemInstanceID, FGpuEmitterCache> GpuEmitterData;
 	
-	EWaterFallButtonState SimulateState = EWaterFallButtonState :: Simulate;
+	
 	const FNiagaraDataSet* GetParticleDataSet(class FNiagaraSystemInstance* SystemInstance, class FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter);
+
+
+	
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
