@@ -175,31 +175,3 @@ bool FCustomNiagaraDataSetAccessor::ValidateDataBuffer(const FNiagaraDataSetComp
 }
 
 
-bool FCustomNiagaraDataSetAccessor::GetParticleInfoFromDataBuffer(const FNiagaraDataSetCompiledData& CompiledData, const FNiagaraDataBuffer* DataBuffer, uint32 Instance, FName ParticleVar, int32& OutInt)
-{
-
-	if(Init(CompiledData, ParticleVar))
-	{
-		for(uint32 iComponent=0; iComponent < NumComponentsInt32; ++iComponent)
-		{
-			OutInt = ReadInt(DataBuffer, Instance, iComponent);
-		}
-		return true;
-	}
-	return false;
-	
-	
-}
-
-bool FCustomNiagaraDataSetAccessor::GetParticleInfoFromDataBuffer(const FNiagaraDataSetCompiledData& CompiledData, const FNiagaraDataBuffer* DataBuffer, uint32 Instance, FName ParticleVar, float& OutFloat)
-{
-	if(Init(CompiledData, ParticleVar))
-	{
-		for (uint32 iComponent=0; iComponent < NumComponentsFloat; ++iComponent)
-		{
-			OutFloat = ReadFloat(DataBuffer, Instance, iComponent);
-		}
-		return true;
-	}
-	return false;
-}

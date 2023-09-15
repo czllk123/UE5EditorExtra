@@ -8,10 +8,11 @@
 #include "DetailWidgetRow.h"
 #include "Editor.h"
 #include "Engine/Selection.h"
+#include "NiagaraSystemInstanceController.h"
 
 
 
-#if WITH_EDITOR
+#if WITH_EDITORONLY_DATA
 TSharedRef<IDetailCustomization> WaterFallCustomization::MakeInstance()
 {
 	return MakeShareable(new WaterFallCustomization);
@@ -66,7 +67,7 @@ void WaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 						{
 							NiagaraComponent->Activate(true);
 							NiagaraComponent->ReregisterComponent();
-						
+							
 							WaterFallActor->StartGenerateSpline();	
 						}
 						else 

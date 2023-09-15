@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "NiagaraComponent.h"
+#include "NiagaraSystemSimulation.h"
 #include "NiagaraSystemInstance.h"
 #include "NiagaraEmitterInstance.h"
 #include "Components/BoxComponent.h"
@@ -57,8 +58,7 @@ class LINKEXTRA_API AWaterFall : public AActor
 {
 	GENERATED_BODY()
 	friend class WaterFallCustomization;
-	friend class CustomNiagaraDataSetAccessor;
-	//friend class FNiagaraDebugHud;
+
 
 	typedef TSharedPtr<class FNiagaraDataSetReadback, ESPMode::ThreadSafe> FGpuDataSetPtr;
 	struct FGpuEmitterCache
@@ -101,7 +101,7 @@ protected:
 
 
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="开始收集粒子数据")
-	void StartGenerateSpline();
+	void  StartGenerateSpline();
 
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="停止收集粒子数据")
 	void StopGenerateSpline();
@@ -112,13 +112,16 @@ protected:
 	void ResetParmaters();
 
 private:
+	/** Index of this instance in the system simulation. */
+	int32 SystemInstanceIndex;
+	
 	EWaterFallButtonState SimulateState = EWaterFallButtonState :: Simulate;
 	
 	TMap<FNiagaraSystemInstanceID, FGpuEmitterCache> GpuEmitterData;
 	
 	
 	const FNiagaraDataSet* GetParticleDataSet(class FNiagaraSystemInstance* SystemInstance, class FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter);
-
+	
 
 	
 public:

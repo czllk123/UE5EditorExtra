@@ -7,15 +7,26 @@
 #include "NiagaraSystemInstanceController.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystemSimulation.h"
-#include "NiagaraDataSetReadback.h"
 #include "CustomNiagaraDataSetAccessor.h"
+
+
 #include "NiagaraDataSet.h"
-#include "NiagaraDataSetDebugAccessor.h"
+
 
 #include "NiagaraSystemInstance.h"
 #include "NiagaraEmitterInstance.h"
-#include "NiagaraGPUSystemTick.h"
 
+#include "Async/TaskGraphFwd.h"
+#include "Async/TaskTrace.h"
+#include "Tasks/TaskPrivate.h"
+#include "Async/InheritedContext.h"
+#include "Engine/Engine.h"
+#include "GameFramework/Pawn.h"
+#include "NiagaraComponent.h"
+#include "NiagaraComputeExecutionContext.h"
+#include "NiagaraDataSetDebugAccessor.h"
+
+#include "NiagaraSystem.h"
 
 
 // Sets default values
@@ -69,51 +80,101 @@ void AWaterFall::StartGenerateSpline()
 	bSimulateValid = false;
 	SimulateState = EWaterFallButtonState::Stop;
 	const FString EmitterName = "Fountain002";
+
 	
 	UE_LOG(LogTemp,Warning,TEXT("测试计时器是否开始！"));
-	
-	if(!Niagara->IsActive())
+
+	if(Niagara == nullptr)
 	{
-		//UE_LOG(LogTemp, Warning, TEXT("Niagara组件没有激活！"));
 		return;
 	}
+	Niagara->Activate(true);
+	//Niagara->GetSystemInstance();
+	Niagara->ReregisterComponent();
 	
+	Niagara->ActivateSystem();
+	Niagara->AdvanceSimulation(100,2.0);
+	check(IsInGameThread());
 	UNiagaraSystem* NiagaraSystem = Niagara->GetAsset();
-	if(NiagaraSystem == nullptr)
+	FNiagaraSystemInstanceControllerPtr SystemInstanceController = Niagara->GetSystemInstanceController();
+	FNiagaraSystemInstance* SystemInstance = SystemInstanceController.IsValid() ? SystemInstanceController->GetSystemInstance_Unsafe() : nullptr;
+	if (NiagaraSystem == nullptr || SystemInstance == nullptr)
 	{
 		return;
 	}
-	FNiagaraSystemInstanceControllerPtr SystemInstanceController = Niagara->GetSystemInstanceController();
-    
-	if(SystemInstanceController.IsValid() == false )
+	const FVector ComponentLocation = Niagara->GetComponentLocation();
+	const bool bIsActive = Niagara->IsActive();
+	if (bIsActive)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("SystemInstanceController无效！"));
-		return ;
+		const FBox Bounds = Niagara->CalcBounds(Niagara->GetComponentTransform()).GetBox();
+		if (Bounds.IsValid)
+		{
+			
+			UE_LOG(LogTemp,Warning,TEXT("Niagara is Active ！"));
+		}
 	}
 	
-	FNiagaraSystemInstance* SystemInstance = SystemInstanceController->GetSystemInstance_Unsafe();
-
-
-	// Get system simulation
+	check(SystemInstance);
+	SystemInstance->Activate();
+	SystemInstance->Init(true);
 	auto SystemSimulation = SystemInstance->GetSystemSimulation();
-	const bool bSystemSimulationValid = SystemSimulation.IsValid() && SystemSimulation->IsValid();
+	if (SystemInstance)
+	{
+		ENiagaraSystemInstanceState CurrentState = SystemInstance->SystemInstanceState;
+
+		if(CurrentState == ENiagaraSystemInstanceState::PendingSpawn)
+		{
+			
+			SystemSimulation->SetInstanceState(SystemInstance, ENiagaraSystemInstanceState::Running);
+		}
+	}
 	/*
-	if (bSystemSimulationValid)
+	if(SystemSimulation)
 	{
 		SystemSimulation->WaitForInstancesTickComplete();
 	}
+
+	if ( SystemInstance->SystemInstanceState == ENiagaraSystemInstanceState::PendingSpawn )
+	{
+		SystemSimulation->FNiagaraSystemSimulation::SetInstanceState(SystemInstance, ENiagaraSystemInstanceState::Running);
+	}
 	*/
-
 	const TArray<TSharedRef<const FNiagaraEmitterCompiledData>>& AllEmittersCompiledData = NiagaraSystem->GetEmitterCompiledData();
+	
 	TArray<FParticleData> ParticleDataArray; //储存所有发射器的粒子数据
+	FCustomNiagaraDataSetAccessor templateFuncs;
 
-	//遍历每个发射器
-	for(int iEmitter = 0; iEmitter < AllEmittersCompiledData.Num(); ++iEmitter)
+	/*
+	auto& EmitterHandles = SystemInstance->GetEmitters();
+	
+	for(int iEmitter = 0; iEmitter < EmitterHandles.Num(); ++iEmitter)
 	{
 
-		FNiagaraEmitterInstance* EmitterInstance = &SystemInstance->GetEmitters()[iEmitter].Get();
-		const FNiagaraDataSet* ParticleDataSet = GetParticleDataSet(SystemInstance, EmitterInstance, iEmitter);
+		FNiagaraEmitterInstance* EmitterInstance = &EmitterHandles[iEmitter].Get();
+		if(!EmitterInstance)
+		{
+			continue;
+		}
+		UE_LOG(LogTemp,Warning,TEXT("EmitterInstance is Active ！"));
+		//const FNiagaraDataSet* ParticleDataSet = GetParticleDataSet(SystemInstance, EmitterInstance, iEmitter);
+	*/
+	
+	Niagara->InitializeSystem();
+	for (const TSharedRef<FNiagaraEmitterInstance, ESPMode::ThreadSafe>& EmitterInstance : SystemInstance->GetEmitters())
+	{
+		UNiagaraEmitter* NiagaraEmitter = EmitterInstance->GetCachedEmitter().Emitter;
+		if (NiagaraEmitter == nullptr)
+		{
+			continue;
+		}
+		if(EmitterInstance->IsInactive()==true)
+		{
+			UE_LOG(LogTemp,Warning,TEXT("EmitterInstance is inactive"));
+		}
 		
+		const int64 BytesUsed = EmitterInstance->GetTotalBytesUsed();
+		UE_LOG(LogTemp, Error, TEXT("Used :%lld"), BytesUsed);
+		const FNiagaraDataSet* ParticleDataSet = &EmitterInstance->GetData();
 		if(ParticleDataSet == nullptr)
 		{
 			continue;
@@ -126,23 +187,26 @@ void AWaterFall::StartGenerateSpline()
 		{
 			continue;
 		}
-		
+		UE_LOG(LogTemp,Warning,TEXT("DataBuffer is Active ！"));
 		for(uint32 iInstance = 0; iInstance < DataBuffer->GetNumInstances(); ++ iInstance)
 		{
-
+			FParticleData TempParticleData;
 			for(const auto& ParticleVar : ParticlesVariables)
 			{
-				//auto& TempInfo = GetParticleInfoFromDataBuffer(CompiledData,DataBuffer, ParticleVar);
-				//ParticleDataArray.Add(TempInfo);
+				templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.UniqueID);
+				templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Position);
+				templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Velocity);
+				templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Age);
+				ParticleDataArray.Add(TempParticleData);
+				UE_LOG(LogTemp,Warning,TEXT("ParticleDataArray"));
 			}
 			
-
 		}
 		
 	}
 	
-	
 }
+
 
 void AWaterFall::StopGenerateSpline()
 {
@@ -155,6 +219,7 @@ void AWaterFall::StopGenerateSpline()
 
 void AWaterFall::ResetParmaters()
 {
+	
 }
 
 
@@ -201,10 +266,12 @@ const FNiagaraDataSet* AWaterFall::GetParticleDataSet(FNiagaraSystemInstance* Sy
 	return &EmitterInstance->GetData();
 }
 
+
 // Called every frame
 void AWaterFall::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	
 	/*
 	FNiagaraSystemInstance* CurrentSystemInstance = nullptr;
 	bIsTicking = !bIsTicking;
