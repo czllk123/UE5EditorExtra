@@ -48,17 +48,7 @@ void WaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 			for(const TWeakObjectPtr<UObject>& Object : SelectedObjects)
 			{
 				AWaterFall* WaterFallActor = Cast<AWaterFall>(Object.Get());
-				/*
-				if(WaterFallActor->bSimulateValid)
-				{
-					WaterFallActor->StartGenerateSpline();
-				}
-				
-				else
-				{
-					WaterFallActor->StopGenerateSpline();
-				}
-				*/
+	
 				for(UActorComponent* AC : WaterFallActor ->GetComponents())
 				{
 					UNiagaraComponent* NiagaraComponent = Cast<UNiagaraComponent>(AC);
@@ -68,13 +58,13 @@ void WaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 							NiagaraComponent->Activate(true);
 							NiagaraComponent->ReregisterComponent();
 							
-							WaterFallActor->StartGenerateSpline();	
+							WaterFallActor->StartSimulation();	
 						}
 						else 
 						{
 							NiagaraComponent->SetPaused(true);
 							NiagaraComponent->ReregisterComponent();
-							WaterFallActor->StopGenerateSpline();
+							WaterFallActor->StopSimulation();
 						}
 				}
 				

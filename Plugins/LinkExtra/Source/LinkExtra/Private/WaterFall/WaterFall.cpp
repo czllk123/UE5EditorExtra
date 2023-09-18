@@ -75,7 +75,7 @@ FCachedVariables CachedVariables;
 
 
 
-void AWaterFall::StartGenerateSpline()
+void AWaterFall::StartSimulation()
 {
 	bSimulateValid = false;
 	SimulateState = EWaterFallButtonState::Stop;
@@ -95,13 +95,40 @@ void AWaterFall::StartGenerateSpline()
 	Niagara->ActivateSystem();
 	Niagara->AdvanceSimulation(100,2.0);
 	check(IsInGameThread());
-	UNiagaraSystem* NiagaraSystem = Niagara->GetAsset();
-	FNiagaraSystemInstanceControllerPtr SystemInstanceController = Niagara->GetSystemInstanceController();
+	
+	FNiagaraSystemInstanceControllerPtr SystemInstanceController = Niagara->GetSystemInstanceController(); 
 	FNiagaraSystemInstance* SystemInstance = SystemInstanceController.IsValid() ? SystemInstanceController->GetSystemInstance_Unsafe() : nullptr;
-	if (NiagaraSystem == nullptr || SystemInstance == nullptr)
-	{
-		return;
-	}
+
+	check(Niagara->GetAsset() != nullptr);
+	StoreSystemInstance = SystemInstance;
+ 
+	
+	GetWorld()->GetTimerManager().SetTimer
+	(SimulationTimerHandle, this, &AWaterFall::GenerateSplineMesh, 1.0f, true );
+	
+	
+}
+
+
+void AWaterFall::StopSimulation()
+{
+
+	bSimulateValid = true;
+	SimulateState = EWaterFallButtonState::Simulate;
+	GetWorld()->GetTimerManager().ClearTimer(SimulationTimerHandle);
+	UE_LOG(LogTemp, Warning ,TEXT("测试计时器是否结束！"))
+}
+
+void AWaterFall::ResetParameters()
+{
+	IsRaining = false;
+}
+
+void AWaterFall::GenerateSplineMesh()
+{
+	
+
+	UNiagaraSystem* NiagaraSystem = Niagara->GetAsset(); 
 	const FVector ComponentLocation = Niagara->GetComponentLocation();
 	const bool bIsActive = Niagara->IsActive();
 	if (bIsActive)
@@ -114,10 +141,11 @@ void AWaterFall::StartGenerateSpline()
 		}
 	}
 	
-	check(SystemInstance);
-	SystemInstance->Activate();
-	SystemInstance->Init(true);
-	auto SystemSimulation = SystemInstance->GetSystemSimulation();
+	check(StoreSystemInstance);
+	StoreSystemInstance->Activate();
+	StoreSystemInstance->Init(true);
+	auto SystemSimulation = StoreSystemInstance->GetSystemSimulation();
+	/*
 	if (SystemInstance)
 	{
 		ENiagaraSystemInstanceState CurrentState = SystemInstance->SystemInstanceState;
@@ -125,10 +153,10 @@ void AWaterFall::StartGenerateSpline()
 		if(CurrentState == ENiagaraSystemInstanceState::PendingSpawn)
 		{
 			
-			SystemSimulation->SetInstanceState(SystemInstance, ENiagaraSystemInstanceState::Running);
+			SystemSimulation->SetInstanceState(SystemInstance, ENiagaraSystemInstanceState::Running); 
 		}
 	}
-	/*
+	
 	if(SystemSimulation)
 	{
 		SystemSimulation->WaitForInstancesTickComplete();
@@ -139,6 +167,7 @@ void AWaterFall::StartGenerateSpline()
 		SystemSimulation->FNiagaraSystemSimulation::SetInstanceState(SystemInstance, ENiagaraSystemInstanceState::Running);
 	}
 	*/
+
 	const TArray<TSharedRef<const FNiagaraEmitterCompiledData>>& AllEmittersCompiledData = NiagaraSystem->GetEmitterCompiledData();
 	
 	TArray<FParticleData> ParticleDataArray; //储存所有发射器的粒子数据
@@ -160,7 +189,7 @@ void AWaterFall::StartGenerateSpline()
 	*/
 	
 	Niagara->InitializeSystem();
-	for (const TSharedRef<FNiagaraEmitterInstance, ESPMode::ThreadSafe>& EmitterInstance : SystemInstance->GetEmitters())
+	for (const TSharedRef<FNiagaraEmitterInstance, ESPMode::ThreadSafe>& EmitterInstance : StoreSystemInstance->GetEmitters())
 	{
 		UNiagaraEmitter* NiagaraEmitter = EmitterInstance->GetCachedEmitter().Emitter;
 		if (NiagaraEmitter == nullptr)
@@ -171,7 +200,7 @@ void AWaterFall::StartGenerateSpline()
 		{
 			UE_LOG(LogTemp,Warning,TEXT("EmitterInstance is inactive"));
 		}
-		
+		 
 		const int64 BytesUsed = EmitterInstance->GetTotalBytesUsed();
 		UE_LOG(LogTemp, Error, TEXT("Used :%lld"), BytesUsed);
 		const FNiagaraDataSet* ParticleDataSet = &EmitterInstance->GetData();
@@ -207,20 +236,6 @@ void AWaterFall::StartGenerateSpline()
 	
 }
 
-
-void AWaterFall::StopGenerateSpline()
-{
-
-	bSimulateValid = true;
-	SimulateState = EWaterFallButtonState::Simulate;
-
-	UE_LOG(LogTemp, Warning ,TEXT("测试计时器是否结束！"))
-}
-
-void AWaterFall::ResetParmaters()
-{
-	
-}
 
 
 const FNiagaraDataSet* AWaterFall::GetParticleDataSet(FNiagaraSystemInstance* SystemInstance, FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter)

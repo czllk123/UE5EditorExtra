@@ -86,9 +86,14 @@ public:
 
 	UPROPERTY(Category="Simulate",BlueprintReadWrite)
 	bool bSimulateValid = true;
+
+	UPROPERTY()
+	bool IsRaining;
 	
 	//要获取的粒子的信息
 	TArray<FName> ParticlesVariables = {"UniqueID","Position",  "Velocity", "Age"};
+
+	FNiagaraSystemInstance* StoreSystemInstance;
 	
 	EWaterFallButtonState GetSimulateStateValue(){ return SimulateState;}
 	
@@ -100,16 +105,20 @@ protected:
 
 
 
-	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="开始收集粒子数据")
-	void  StartGenerateSpline();
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="开始模拟")
+	void  StartSimulation();
 
-	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="停止收集粒子数据")
-	void StopGenerateSpline();
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="停止模拟")
+	void StopSimulation();
 	
-	FTimerHandle ParticleDataTimerHandle;
+	FTimerHandle SimulationTimerHandle;
 
 	UFUNCTION(BlueprintCallable,CallInEditor, Category ="WaterFall")
-	void ResetParmaters();
+	void ResetParameters();
+	
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成瀑布面片")
+	void GenerateSplineMesh();
+
 
 private:
 	/** Index of this instance in the system simulation. */
