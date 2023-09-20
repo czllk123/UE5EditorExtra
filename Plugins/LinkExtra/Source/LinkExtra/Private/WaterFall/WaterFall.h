@@ -77,7 +77,7 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
 	UNiagaraComponent* Niagara;
-
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaterFall")
 	AWaterFall* WaterFall;
 	
@@ -123,7 +123,8 @@ protected:
 private:
 	/** Index of this instance in the system simulation. */
 	int32 SystemInstanceIndex;
-	
+
+	//设置按钮默认值
 	EWaterFallButtonState SimulateState = EWaterFallButtonState :: Simulate;
 	
 	TMap<FNiagaraSystemInstanceID, FGpuEmitterCache> GpuEmitterData;

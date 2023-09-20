@@ -44,30 +44,17 @@ void WaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 		//.Text(FText::FromString("Simulate"))
 		.OnClicked_Lambda([this]() -> FReply
 		{
-			
 			for(const TWeakObjectPtr<UObject>& Object : SelectedObjects)
 			{
 				AWaterFall* WaterFallActor = Cast<AWaterFall>(Object.Get());
-	
-				for(UActorComponent* AC : WaterFallActor ->GetComponents())
+				if(WaterFallActor->bSimulateValid)
 				{
-					UNiagaraComponent* NiagaraComponent = Cast<UNiagaraComponent>(AC);
-					if(NiagaraComponent)
-						if(WaterFallActor->bSimulateValid)
-						{
-							NiagaraComponent->Activate(true);
-							NiagaraComponent->ReregisterComponent();
-							
-							WaterFallActor->StartSimulation();	
-						}
-						else 
-						{
-							NiagaraComponent->SetPaused(true);
-							NiagaraComponent->ReregisterComponent();
-							WaterFallActor->StopSimulation();
-						}
+					WaterFallActor->StartSimulation();
 				}
-				
+				else 
+				{
+					WaterFallActor->StopSimulation();
+				}
 			}
 			return FReply::Handled();
 		})
