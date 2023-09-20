@@ -48,10 +48,13 @@ public:
 			}
 			OutValue = TempVector;
 		}
-
-
-		// 可以继续添加其他数据类型的处理逻辑
-
+		else if constexpr (std::is_same_v<T, float>)
+		{
+			for(uint32 iComponent=0; iComponent < NumComponentsFloat; ++iComponent)
+			{
+				OutValue = ReadFloat(DataBuffer, Instance, iComponent);
+			}
+		}
 		return true;
 	}
 	return false;

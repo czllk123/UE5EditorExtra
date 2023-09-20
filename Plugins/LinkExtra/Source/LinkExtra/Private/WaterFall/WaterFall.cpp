@@ -208,20 +208,39 @@ void AWaterFall::GenerateSplineMesh()
 		{
 			continue;
 		}
-		UE_LOG(LogTemp,Warning,TEXT("DataBuffer is Active ！"));
+		UE_LOG(LogTemp,Warning,TEXT("DataBuffer is Valid ！"));
 		for(uint32 iInstance = 0; iInstance < DataBuffer->GetNumInstances(); ++ iInstance)
 		{
 			FParticleData TempParticleData;
 			for(const auto& ParticleVar : ParticlesVariables)
 			{
-				templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.UniqueID);
-				templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Position);
-				templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Velocity);
-				templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Age);
-				ParticleDataArray.Add(TempParticleData);
-				UE_LOG(LogTemp,Warning,TEXT("ParticleDataArray"));
+				if (ParticleVar == "Position") 
+				{
+					templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Position);
+				} 
+				else if (ParticleVar == "Velocity") 
+				{
+					templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Velocity);
+				} 
+				else if (ParticleVar == "Age") 
+				{
+					templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Age);
+				}
+				else if (ParticleVar == "UniqueID") 
+				{
+					templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.UniqueID);
+				}
 			}
+			ParticleDataArray.Add(TempParticleData);
 			
+		}
+		for(const FParticleData& particle : ParticleDataArray)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Particle Data - UniqueID: %d, Position: %s, Velocity: %s, Age: %f"), 
+				   particle.UniqueID, 
+				   *particle.Position.ToString(), 
+				   *particle.Velocity.ToString(), 
+				   particle.Age);
 		}
 		
 	}
