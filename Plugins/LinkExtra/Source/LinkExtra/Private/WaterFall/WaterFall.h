@@ -7,13 +7,14 @@
 #include "NiagaraComponent.h"
 #include "NiagaraSystemSimulation.h"
 #include "NiagaraSystemInstance.h"
-#include "NiagaraEmitterInstance.h"
+
 #include "Components/BoxComponent.h"
-#include "NiagaraComputeExecutionContext.h"
+
 #include "NiagaraDataSetDebugAccessor.h"
+#include "Components/SplineComponent.h"
 #include "WaterFall.generated.h"
 
-//class FNiagaraDataSet;
+
 
 
 
@@ -119,7 +120,12 @@ protected:
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成瀑布面片")
 	void GenerateSplineMesh();
 
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="更新瀑布曲线")
+	void UpdateSplineComponent(int32 ParticleID, FVector ParticlePosition);
 
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="清理所有曲线")
+	void ClearAllSpline();
+	
 private:
 	/** Index of this instance in the system simulation. */
 	int32 SystemInstanceIndex;
@@ -132,7 +138,10 @@ private:
 	
 	const FNiagaraDataSet* GetParticleDataSet(class FNiagaraSystemInstance* SystemInstance, class FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter);
 	
+	USplineComponent* WaterFallSpline;
 
+	//粒子ID和SplineComponent映射map
+	TMap<int32, USplineComponent*> ParticleIDToSplineComponentMap;
 	
 public:
 	// Called every frame

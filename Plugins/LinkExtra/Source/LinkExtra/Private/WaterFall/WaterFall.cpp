@@ -49,7 +49,6 @@ AWaterFall::AWaterFall()
 	Niagara->bAutoRegister=true;
 
 	
-
 	Niagara->SetNiagaraVariableObject(TEXT("User.ParticleExportObject"),this);
 
 	
@@ -87,6 +86,16 @@ void AWaterFall::StartSimulation()
 	bSimulateValid = false;
 	SimulateState = EWaterFallButtonState::Stop;
 
+	//重新模式前，清理场景中的Spline
+	ClearAllSpline();
+	/*
+	WaterFallSpline = NewObject<USplineComponent>(this);
+	WaterFallSpline->SetupAttachment(SceneRoot);
+	WaterFallSpline->SetHiddenInGame(true);
+	WaterFallSpline->SetMobility(EComponentMobility::Movable);
+	WaterFallSpline->RegisterComponent();
+	*/
+	
 	USelection* SelectedActors = GEditor->GetSelectedActors();
 	for (FSelectionIterator It(*SelectedActors); It; ++It)
 	{
@@ -154,10 +163,13 @@ void AWaterFall::StopSimulation()
 
 		}
 	}
+
+	//WaterFallSpline->DestroyComponent();
+	
 	UE_LOG(LogTemp, Warning ,TEXT("测试计时器是否结束！"))
 	
 	if(SimulationTimerHandle.IsValid())
-		GetWorld()->GetTimerManager().ClearTimer(SimulationTimerHandle);
+		GetWorld()->GetTimerManager().ClearTimer(SimulationTimerHandle); 
 	
 }
 
@@ -180,7 +192,7 @@ void AWaterFall::GenerateSplineMesh()
 	
 	TArray<FParticleData> ParticleDataArray; //储存所有发射器的粒子数据
 	FCustomNiagaraDataSetAccessor templateFuncs;
-
+	
 	for (const TSharedRef<FNiagaraEmitterInstance, ESPMode::ThreadSafe>& EmitterInstance : StoreSystemInstance->GetEmitters())
 	{
 		UNiagaraEmitter* NiagaraEmitter = EmitterInstance->GetCachedEmitter().Emitter;
@@ -242,11 +254,56 @@ void AWaterFall::GenerateSplineMesh()
 				   *particle.Velocity.ToString(), 
 				   particle.Age);
 		}
+		UE_LOG(LogTemp, Error, TEXT("============================================================================"));
 		
+		for(const FParticleData& particle : ParticleDataArray)
+		{
+			UpdateSplineComponent(particle.UniqueID, particle.Position);
+		}
 	}
+	WaterFallSpline->UpdateSpline();
+
+
+
+
+
 	
 }
 
+void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePosition)
+{
+	USplineComponent** SplineComponentPtr = ParticleIDToSplineComponentMap.Find(ParticleID);
+	if(SplineComponentPtr)
+	{
+		WaterFallSpline = *SplineComponentPtr;
+		WaterFallSpline->AddSplineWorldPoint(ParticlePosition);
+	}
+	else
+	{
+		// 如果没找到，创建一个新的SplineComponent并添加到TMap
+		WaterFallSpline = NewObject<USplineComponent>(this, USplineComponent::StaticClass());
+		WaterFallSpline->RegisterComponent();  // 注册组件，使其成为场景的一部分
+		WaterFallSpline->AttachToComponent(SceneRoot, FAttachmentTransformRules::KeepRelativeTransform); 
+		WaterFallSpline->ClearSplinePoints(true);
+		ParticleIDToSplineComponentMap.Add(ParticleID, WaterFallSpline);
+
+		WaterFallSpline->AddSplinePointAtIndex(ParticlePosition,0, ESplineCoordinateSpace::World,true );
+	}
+}
+
+void AWaterFall::ClearAllSpline()
+{
+	for(auto& ElementSpline: ParticleIDToSplineComponentMap)
+	{
+		USplineComponent* SplineComponent = ElementSpline.Value;
+		if(SplineComponent)
+		{
+			SplineComponent->DestroyComponent();
+		}
+	}
+	//清空TMap
+	ParticleIDToSplineComponentMap.Empty();
+}
 
 
 const FNiagaraDataSet* AWaterFall::GetParticleDataSet(FNiagaraSystemInstance* SystemInstance, FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter)
@@ -329,5 +386,4 @@ void AWaterFall::Tick(float DeltaTime)
 	}
 */
 }
-
 
