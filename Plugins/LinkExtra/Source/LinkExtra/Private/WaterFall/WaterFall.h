@@ -12,6 +12,7 @@
 
 #include "NiagaraDataSetDebugAccessor.h"
 #include "Components/SplineComponent.h"
+#include "Components/SplineMeshComponent.h"
 #include "WaterFall.generated.h"
 
 
@@ -123,14 +124,20 @@ protected:
 	UFUNCTION(BlueprintCallable,CallInEditor, Category ="WaterFall")
 	void ResetParameters();
 	
-	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成瀑布面片")
-	void GenerateSplineMesh();
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="收集粒子Buffer")
+	void CollectionParticleDataBuffer();
 
-	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="更新瀑布曲线")
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成瀑布面片")
+	void GenerateWaterFallSpline();
+	
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成Spline曲线")
 	void UpdateSplineComponent(int32 ParticleID, FVector ParticlePosition);
 
-	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="清理所有曲线")
+	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="清理所有曲线")
 	void ClearAllSpline();
+
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成SplineMesh")
+	void GenerateWaterFallSplineMesh(int32 ParticleID);
 	
 private:
 	/** Index of this instance in the system simulation. */
@@ -149,6 +156,12 @@ private:
 
 	//粒子ID和SplineComponent映射map
 	TMap<int32, USplineComponent*> ParticleIDToSplineComponentMap;
+
+	// 存储SplineMeshComponent的数组
+	TArray<USplineMeshComponent*> CachedSplineMeshComponents;
+	
+	//储存所有发射器的粒子数据
+	TArray<FParticleData> ParticleDataArray; 
 	
 public:
 	// Called every frame

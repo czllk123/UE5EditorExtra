@@ -24,9 +24,10 @@
 #include "GameFramework/Pawn.h"
 
 #include "NiagaraComputeExecutionContext.h"
-#include "NiagaraDataSetDebugAccessor.h"
+
 #include "Selection.h"
 #include "NiagaraSystem.h"
+#include "Components/SplineMeshComponent.h"
 
 
 // Sets default values
@@ -66,8 +67,6 @@ void AWaterFall::BeginPlay()
 void AWaterFall::StartSimulation()
 {
 	
-	
-
 	UE_LOG(LogTemp,Warning,TEXT("测试计时器是否开始！"));
 	//const FString EmitterName = "Fountain002";
 	bSimulateValid = false;
@@ -116,7 +115,7 @@ void AWaterFall::StartSimulation()
 	}
 	
 	GetWorld()->GetTimerManager().SetTimer
-	(SimulationTimerHandle, this, &AWaterFall::GenerateSplineMesh, GetDataBufferRate, true );
+	(SimulationTimerHandle, this, &AWaterFall::GenerateWaterFallSpline, GetDataBufferRate, true );
 }
 
 
@@ -149,12 +148,9 @@ void AWaterFall::StopSimulation()
 	
 }
 
-void AWaterFall::ResetParameters()
-{
-	IsRaining = false;
-}
 
-void AWaterFall::GenerateSplineMesh()
+
+void AWaterFall::CollectionParticleDataBuffer()
 {
 	UE_LOG(LogTemp, Warning ,TEXT(" Start GenerateSplineMesh！"))
 	
@@ -166,7 +162,7 @@ void AWaterFall::GenerateSplineMesh()
 		SystemSimulation->WaitForInstancesTickComplete();
 	}
 	
-	TArray<FParticleData> ParticleDataArray; //储存所有发射器的粒子数据
+	//TArray<FParticleData> ParticleDataArray; //储存所有发射器的粒子数据
 	FCustomNiagaraDataSetAccessor templateFuncs;
 	
 	for (const TSharedRef<FNiagaraEmitterInstance, ESPMode::ThreadSafe>& EmitterInstance : StoreSystemInstance->GetEmitters())
@@ -230,18 +226,65 @@ void AWaterFall::GenerateSplineMesh()
 				   particle.Age);
 		}
 		UE_LOG(LogTemp, Error, TEXT("============================================================================"));
-		*/
-		for(const FParticleData& particle : ParticleDataArray)
+		
+		for(const FParticleData& Particle : ParticleDataArray)
 		{
-			UpdateSplineComponent(particle.UniqueID, particle.Position);
+			UpdateSplineComponent(Particle.UniqueID, Particle.Position);
+		}*/
+	}
+	
+}
+
+void AWaterFall::GenerateWaterFallSpline()
+{
+	//由于DataBuffer是在间隔时间内传输多个粒子数据，所以绘制spline的时候不需要之前的数据，要清空ParticleDataArray
+	ParticleDataArray.Empty();
+	CachedSplineMeshComponents.Empty();
+	//间隔时间内收集DataBuffer
+	CollectionParticleDataBuffer();
+	//绘制spline
+	for(const FParticleData& Particle : ParticleDataArray)
+	{
+		UpdateSplineComponent(Particle.UniqueID, Particle.Position);
+		//暂且在这个地方调用
+		GenerateWaterFallSplineMesh(Particle.UniqueID);
+	}
+}
+
+
+//TODO 后期考虑缓存一个spline,进行分簇筛选和重采样后再生成Mesh
+void AWaterFall::GenerateWaterFallSplineMesh(int32 ParticleID)
+{
+	USplineComponent** SplineComponentPtr = ParticleIDToSplineComponentMap.Find(ParticleID);
+	if(SplineComponentPtr)
+	{
+		USplineComponent* Spline = *SplineComponentPtr;
+		int32 NumSplineSegments = Spline->GetNumberOfSplineSegments();
+		if(NumSplineSegments == 0)
+		{
+			return;
+		}
+		for(int32 i = 0; i < NumSplineSegments; ++i)
+		{
+			FVector StartPos, StartTangent, EndPos, EndTangent;
+			Spline->GetLocationAndTangentAtSplinePoint(i, StartPos, StartTangent, ESplineCoordinateSpace::Local);
+			Spline->GetLocationAndTangentAtSplinePoint(i + 1, EndPos, EndTangent, ESplineCoordinateSpace::Local);
+
+			USplineMeshComponent* SplineMesh = NewObject<USplineMeshComponent>(this, USplineMeshComponent::StaticClass());
+			SplineMesh->SetStaticMesh(Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(),nullptr,TEXT("/Engine/EditorLandscapeResources/SplineEditorMesh"))));
+			SplineMesh->SetStartAndEnd(StartPos, StartTangent, EndPos, EndTangent);
+			
+			SplineMesh->SetStartScale(FVector2d(1,1),true);
+			SplineMesh->SetEndScale(FVector2d(1,1),true);
+			
+			SplineMesh->SetMobility(EComponentMobility::Movable);
+			SplineMesh->RegisterComponent();
+			SplineMesh->AttachToComponent(Spline, FAttachmentTransformRules::KeepRelativeTransform);  // 将Spline Mesh附加到Spline上
+			SplineMesh->SetVisibility(true, true);
+			//存储到内存，方便追踪和销毁
+			CachedSplineMeshComponents.Add(SplineMesh);
 		}
 	}
-
-
-
-
-
-
 	
 }
 
@@ -263,7 +306,8 @@ void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePositio
 		WaterFallSpline->AttachToComponent(SceneRoot, FAttachmentTransformRules::KeepRelativeTransform);
 		WaterFallSpline->ClearSplinePoints(true);
 		WaterFallSpline->AddSplinePointAtIndex(ParticlePosition,0, ESplineCoordinateSpace::World,true );
-		
+
+		//这个Map是粒子ID和SplineComponent的一个映射，判断接下来收集到的Buffer该绘制那根曲线
 		ParticleIDToSplineComponentMap.Add(ParticleID, WaterFallSpline);
 
 #if WITH_EDITORONLY_DATA
@@ -285,10 +329,24 @@ void AWaterFall::ClearAllSpline()
 			SplineComponent->DestroyComponent();
 		}
 	}
+	for(USplineMeshComponent* SplineMeshComponent : CachedSplineMeshComponents)
+	{
+		if(SplineMeshComponent)
+		{
+			SplineMeshComponent->DestroyComponent();
+		}
+		
+	}
 	//清空TMap
 	ParticleIDToSplineComponentMap.Empty();
+	CachedSplineMeshComponents.Empty();
+	
 }
 
+void AWaterFall::ResetParameters()
+{
+	IsRaining = false;
+}
 
 const FNiagaraDataSet* AWaterFall::GetParticleDataSet(FNiagaraSystemInstance* SystemInstance, FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter)
 {
