@@ -37,19 +37,18 @@ AWaterFall::AWaterFall()
 	//PrimaryActorTick.TickInterval = 1.0f;
 	bIsEditorOnlyActor = true;
 
-	bIsTicking = false;
+
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	RootComponent = SceneRoot;
 
 	Niagara = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
 	Niagara->SetupAttachment(RootComponent);
-	Niagara->bAutoActivate=true;
 	Niagara->Deactivate();
-	Niagara->bAutoRegister=true;
 
 	
-	Niagara->SetNiagaraVariableObject(TEXT("User.ParticleExportObject"),this);
+	//Niagara->SetNiagaraVariableObject(TEXT("User.ParticleExportObject"),this);
+	Niagara->SetNiagaraVariableInt(TEXT("ParticleSpawnCount"),SplineCount);
 
 	
 	BoxCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxCollision"));
@@ -63,38 +62,22 @@ void AWaterFall::BeginPlay()
 	
 }
 
-struct FCachedVariables
-{
-	TArray<TArray<FNiagaraDataSetDebugAccessor>> ParticlesVariables;
-	
-};
-
-FCachedVariables CachedVariables;
-
-
-
-
-
-
-
-
 
 void AWaterFall::StartSimulation()
 {
+	
+	
 
+	UE_LOG(LogTemp,Warning,TEXT("测试计时器是否开始！"));
 	//const FString EmitterName = "Fountain002";
 	bSimulateValid = false;
 	SimulateState = EWaterFallButtonState::Stop;
 
+	//每次调用函数都新生成一个Stream流
+	RandomStream.Initialize(FPlatformTime::Cycles());
+	
 	//重新模式前，清理场景中的Spline
 	ClearAllSpline();
-	/*
-	WaterFallSpline = NewObject<USplineComponent>(this);
-	WaterFallSpline->SetupAttachment(SceneRoot);
-	WaterFallSpline->SetHiddenInGame(true);
-	WaterFallSpline->SetMobility(EComponentMobility::Movable);
-	WaterFallSpline->RegisterComponent();
-	*/
 	
 	USelection* SelectedActors = GEditor->GetSelectedActors();
 	for (FSelectionIterator It(*SelectedActors); It; ++It)
@@ -107,14 +90,13 @@ void AWaterFall::StartSimulation()
 			{
 				continue;
 			}
-			//NiagaraComponent->InitializeComponent();
 			NiagaraComponent->bAutoActivate=true;
 			NiagaraComponent->Activate(false);
 			NiagaraComponent->ReregisterComponent();
-			
-			UE_LOG(LogTemp,Warning,TEXT("测试计时器是否开始！"));
-	
 
+			//设置Niagara模拟时的相关参数
+			NiagaraComponent->SetNiagaraVariableInt(TEXT("ParticleSpawnCount"),SplineCount);
+			
 			check(IsInGameThread());
 			FNiagaraSystemInstanceControllerPtr SystemInstanceController = NiagaraComponent->GetSystemInstanceController(); 
 			FNiagaraSystemInstance* SystemInstance = SystemInstanceController.IsValid() ? SystemInstanceController->GetSystemInstance_Unsafe() : nullptr;
@@ -134,9 +116,7 @@ void AWaterFall::StartSimulation()
 	}
 	
 	GetWorld()->GetTimerManager().SetTimer
-	(SimulationTimerHandle, this, &AWaterFall::GenerateSplineMesh, 1.0f, true );
-
-	
+	(SimulationTimerHandle, this, &AWaterFall::GenerateSplineMesh, GetDataBufferRate, true );
 }
 
 
@@ -160,12 +140,8 @@ void AWaterFall::StopSimulation()
 			NiagaraComponent->bAutoActivate=false;
 			NiagaraComponent->Deactivate();
 			NiagaraComponent->ReregisterComponent();
-
 		}
 	}
-
-	//WaterFallSpline->DestroyComponent();
-	
 	UE_LOG(LogTemp, Warning ,TEXT("测试计时器是否结束！"))
 	
 	if(SimulationTimerHandle.IsValid())
@@ -181,7 +157,7 @@ void AWaterFall::ResetParameters()
 void AWaterFall::GenerateSplineMesh()
 {
 	UE_LOG(LogTemp, Warning ,TEXT(" Start GenerateSplineMesh！"))
-
+	
 	auto SystemSimulation = StoreSystemInstance->GetSystemSimulation();
 	const bool bSystemSimulationValid = SystemSimulation.IsValid() && SystemSimulation->IsValid();
 	//等待异步完成再去访问资源，否则触发崩溃
@@ -204,9 +180,7 @@ void AWaterFall::GenerateSplineMesh()
 		{
 			UE_LOG(LogTemp,Warning,TEXT("EmitterInstance is inactive"));
 		}
-		 
-		const int64 BytesUsed = EmitterInstance->GetTotalBytesUsed();
-		UE_LOG(LogTemp, Error, TEXT("Used1 :%lld"), BytesUsed);
+		
 		const FNiagaraDataSet* ParticleDataSet = &EmitterInstance->GetData();
 		if(ParticleDataSet == nullptr)
 		{
@@ -246,6 +220,7 @@ void AWaterFall::GenerateSplineMesh()
 			ParticleDataArray.Add(TempParticleData);
 			
 		}
+		/*
 		for(const FParticleData& particle : ParticleDataArray)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Particle Data - UniqueID: %d, Position: %s, Velocity: %s, Age: %f"), 
@@ -255,13 +230,13 @@ void AWaterFall::GenerateSplineMesh()
 				   particle.Age);
 		}
 		UE_LOG(LogTemp, Error, TEXT("============================================================================"));
-		
+		*/
 		for(const FParticleData& particle : ParticleDataArray)
 		{
 			UpdateSplineComponent(particle.UniqueID, particle.Position);
 		}
 	}
-	WaterFallSpline->UpdateSpline();
+
 
 
 
@@ -281,13 +256,22 @@ void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePositio
 	else
 	{
 		// 如果没找到，创建一个新的SplineComponent并添加到TMap
-		WaterFallSpline = NewObject<USplineComponent>(this, USplineComponent::StaticClass());
+		WaterFallSpline = NewObject<USplineComponent>(this, USplineComponent::StaticClass()); 
+		WaterFallSpline->SetHiddenInGame(true);
+		WaterFallSpline->SetMobility(EComponentMobility::Movable);
 		WaterFallSpline->RegisterComponent();  // 注册组件，使其成为场景的一部分
-		WaterFallSpline->AttachToComponent(SceneRoot, FAttachmentTransformRules::KeepRelativeTransform); 
+		WaterFallSpline->AttachToComponent(SceneRoot, FAttachmentTransformRules::KeepRelativeTransform);
 		WaterFallSpline->ClearSplinePoints(true);
+		WaterFallSpline->AddSplinePointAtIndex(ParticlePosition,0, ESplineCoordinateSpace::World,true );
+		
 		ParticleIDToSplineComponentMap.Add(ParticleID, WaterFallSpline);
 
-		WaterFallSpline->AddSplinePointAtIndex(ParticlePosition,0, ESplineCoordinateSpace::World,true );
+#if WITH_EDITORONLY_DATA
+		const FLinearColor RandomColor(RandomStream.FRand(), RandomStream.FRand(), RandomStream.FRand(), 1.0f);
+		WaterFallSpline->EditorUnselectedSplineSegmentColor = RandomColor;
+		//UE_LOG(LogTemp,Warning,TEXT("Color : %s"),*RandomColor.ToString());
+		WaterFallSpline->EditorSelectedSplineSegmentColor=(FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
+#endif
 	}
 }
 
@@ -354,36 +338,5 @@ void AWaterFall::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	
-	/*
-	FNiagaraSystemInstance* CurrentSystemInstance = nullptr;
-	bIsTicking = !bIsTicking;
-	SetActorTickEnabled(bIsTicking);.bIsTicking
-	CurrentSystemInstance = GetNiagaraSystemInstance();
-	bool bSelected = IsSelectedInEditor();
-	if(bSelected)
-	{
-		CurrentSystemInstance = GetNiagaraSystemInstance();
-	}
-	
-	if(bIsTicking && CurrentSystemInstance!=nullptr)
-	{
-		Niagara->SetPaused(false);
-		Niagara->Activate(true);
-		Niagara->ReregisterComponent();
-		TArray<FParticleData> TempData;
-		TempData = CollectParticleData(CurrentSystemInstance);
-		
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Tick is now disabled"));
-
-		// Deactivate Niagara if it's active
-		if (Niagara && Niagara->IsActive())
-		{
-			Niagara->Deactivate();
-		}
-	}
-*/
 }
 

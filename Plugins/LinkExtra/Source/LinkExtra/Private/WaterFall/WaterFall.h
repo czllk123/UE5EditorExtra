@@ -73,16 +73,13 @@ public:
 	// Sets default values for this actor's properties
 	AWaterFall();
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WaterFall")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
 	USceneComponent* SceneRoot;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
 	UNiagaraComponent* Niagara;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="WaterFall")
-	AWaterFall* WaterFall;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WaterFall")
 	UBoxComponent* BoxCollision;
 
 	UPROPERTY(Category="Simulate",BlueprintReadWrite)
@@ -97,6 +94,15 @@ public:
 	FNiagaraSystemInstance* StoreSystemInstance;
 	
 	EWaterFallButtonState GetSimulateStateValue(){ return SimulateState;}
+
+	//生成瀑布面片数量
+	UPROPERTY(EditAnywhere, Category = "WaterFall", BlueprintReadWrite, meta = (ClampMin = " 1"), meta = (ClampMax = "100"))
+	int32 SplineCount = 10;
+
+	//获取粒子buffer的时间间隔
+	UPROPERTY(EditAnywhere, Category = "WaterFall", BlueprintReadWrite, meta = (ClampMin = " 0.25"), meta = (ClampMax = "2"))
+	float GetDataBufferRate = 0.5f;
+	
 	
 protected:
 	// Called when the game starts or when spawned
@@ -139,6 +145,7 @@ private:
 	const FNiagaraDataSet* GetParticleDataSet(class FNiagaraSystemInstance* SystemInstance, class FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter);
 	
 	USplineComponent* WaterFallSpline;
+	FRandomStream RandomStream;
 
 	//粒子ID和SplineComponent映射map
 	TMap<int32, USplineComponent*> ParticleIDToSplineComponentMap;
