@@ -54,8 +54,8 @@ struct FParticleData
 
 
 
-UCLASS(ClassGroup=(Custom), HideCategories=(Tags,AssetUserData, Rendering, Physics,
-	Activation, Collision, Cooking, HLOD, Networking, Input, LOD, Actor,Replication))
+UCLASS(hidecategories=(Tags, AssetUserData, Rendering, Physics,
+	Activation, Collision, Cooking, HLOD, Networking, Input, LOD, Actor,Replication, Navigation, PathTracing, DataLayers, WorldPartition))
 class LINKEXTRA_API AWaterFall : public AActor
 {
 	GENERATED_BODY()
@@ -97,26 +97,29 @@ public:
 	EWaterFallButtonState GetSimulateStateValue(){ return SimulateState;}
 
 	//生成瀑布面片数量
-	UPROPERTY(EditAnywhere, Category = "WaterFall", BlueprintReadWrite, meta = (ClampMin = " 1"), meta = (ClampMax = "100"))
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = " 1"), meta = (ClampMax = "100"))
 	int32 SplineCount = 10;
 
 	//获取粒子buffer的时间间隔
-	UPROPERTY(EditAnywhere, Category = "WaterFall", BlueprintReadWrite, meta = (ClampMin = " 0.25"), meta = (ClampMax = "2"))
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = " 0.25"), meta = (ClampMax = "2"))
 	float GetDataBufferRate = 0.5f;
 	
+	//面片开始宽度
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh", BlueprintReadWrite, meta = (ClampMin = " 0"), meta = (ClampMax = "5"))
+	FVector2D StartWidthRange  = FVector2D(2,5);
 	
+	// 面片结束宽度范围
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh", BlueprintReadWrite, meta = (ClampMin = "5", ClampMax = "10"))
+	FVector2D EndWidthRange = FVector2D(5.0, 7.0);
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 	
-	bool bIsTicking = false;
-
-
-
-	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="开始模拟")
+	
+	UFUNCTION(BlueprintCallable,Category="WaterFall|Spline", DisplayName="开始模拟")
 	void  StartSimulation();
 
-	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="停止模拟")
+	UFUNCTION(BlueprintCallable,Category="WaterFall|Spline", DisplayName="停止模拟")
 	void StopSimulation();
 	
 	FTimerHandle SimulationTimerHandle;
@@ -127,18 +130,23 @@ protected:
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="收集粒子Buffer")
 	void CollectionParticleDataBuffer();
 
-	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成瀑布面片")
+	UFUNCTION(BlueprintCallable,Category="WaterFall|Spline", DisplayName="生成瀑布面片")
 	void GenerateWaterFallSpline();
+
+	UFUNCTION(BlueprintCallable,CallInEditor,Category="WaterFall", DisplayName="生成SplineMesh")
+	void GenerateWaterFallMesh();
 	
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成Spline曲线")
 	void UpdateSplineComponent(int32 ParticleID, FVector ParticlePosition);
-
-	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="清理所有曲线")
-	void ClearAllSpline();
-
-	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成SplineMesh")
-	void GenerateWaterFallSplineMesh(int32 ParticleID);
 	
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成SplineMesh")
+	void UpdateSplineMeshComponent(int32 ParticleID);
+
+	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="清理资源")
+	void ClearAllResource();
+
+	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="清理所有Mesh")
+	void ClearAllSplineMesh();
 private:
 	/** Index of this instance in the system simulation. */
 	int32 SystemInstanceIndex;
@@ -160,8 +168,11 @@ private:
 	// 存储SplineMeshComponent的数组
 	TArray<USplineMeshComponent*> CachedSplineMeshComponents;
 	
-	//储存所有发射器的粒子数据
-	TArray<FParticleData> ParticleDataArray; 
+	// 储存所有发射器的粒子数据
+	TArray<FParticleData> ParticleDataArray;
+
+	// 最近一个段落的结束宽度
+	float LastSegmentEndWidth = 0.0f; 
 	
 public:
 	// Called every frame

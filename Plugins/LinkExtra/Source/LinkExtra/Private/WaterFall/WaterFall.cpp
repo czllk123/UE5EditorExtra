@@ -76,7 +76,7 @@ void AWaterFall::StartSimulation()
 	RandomStream.Initialize(FPlatformTime::Cycles());
 	
 	//重新模式前，清理场景中的Spline
-	ClearAllSpline();
+	ClearAllResource();
 	
 	USelection* SelectedActors = GEditor->GetSelectedActors();
 	for (FSelectionIterator It(*SelectedActors); It; ++It)
@@ -246,50 +246,90 @@ void AWaterFall::GenerateWaterFallSpline()
 	for(const FParticleData& Particle : ParticleDataArray)
 	{
 		UpdateSplineComponent(Particle.UniqueID, Particle.Position);
-		//暂且在这个地方调用
-		GenerateWaterFallSplineMesh(Particle.UniqueID);
+		
+	}
+}
+void AWaterFall::GenerateWaterFallMesh()
+{
+	ClearAllSplineMesh();
+	for(const FParticleData& Particle : ParticleDataArray)
+	{
+		
+		//暂且在这个地方调用,因为不需要每帧绘制，所以不能像spline那样
+		UpdateSplineMeshComponent(Particle.UniqueID);
 	}
 }
 
 
 //TODO 后期考虑缓存一个spline,进行分簇筛选和重采样后再生成Mesh
-void AWaterFall::GenerateWaterFallSplineMesh(int32 ParticleID)
+void AWaterFall::UpdateSplineMeshComponent(int32 ParticleID)
 {
-	USplineComponent** SplineComponentPtr = ParticleIDToSplineComponentMap.Find(ParticleID);
-	if(SplineComponentPtr)
-	{
-		USplineComponent* Spline = *SplineComponentPtr;
-		int32 NumSplineSegments = Spline->GetNumberOfSplineSegments();
-		if(NumSplineSegments == 0)
-		{
-			return;
-		}
-		for(int32 i = 0; i < NumSplineSegments; ++i)
-		{
-			FVector StartPos, StartTangent, EndPos, EndTangent;
-			Spline->GetLocationAndTangentAtSplinePoint(i, StartPos, StartTangent, ESplineCoordinateSpace::Local);
-			Spline->GetLocationAndTangentAtSplinePoint(i + 1, EndPos, EndTangent, ESplineCoordinateSpace::Local);
 
-			USplineMeshComponent* SplineMesh = NewObject<USplineMeshComponent>(this, USplineMeshComponent::StaticClass());
-			SplineMesh->SetStaticMesh(Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(),nullptr,TEXT("/Engine/EditorLandscapeResources/SplineEditorMesh"))));
-			SplineMesh->SetStartAndEnd(StartPos, StartTangent, EndPos, EndTangent);
-			
-			SplineMesh->SetStartScale(FVector2d(1,1),true);
-			SplineMesh->SetEndScale(FVector2d(1,1),true);
-			
-			SplineMesh->SetMobility(EComponentMobility::Movable);
-			SplineMesh->RegisterComponent();
-			SplineMesh->AttachToComponent(Spline, FAttachmentTransformRules::KeepRelativeTransform);  // 将Spline Mesh附加到Spline上
-			SplineMesh->SetVisibility(true, true);
-			//存储到内存，方便追踪和销毁
-			CachedSplineMeshComponents.Add(SplineMesh);
-		}
+	//重置之前存的结束宽度，否则生成的曲线会越来越宽
+	LastSegmentEndWidth = 0.0f;
+	
+	USplineComponent** SplineComponentPtr = ParticleIDToSplineComponentMap.Find(ParticleID);
+	if(SplineComponentPtr == nullptr)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid ParticleID provided"));
+		return;
+	}
+	USplineComponent* Spline = *SplineComponentPtr;
+	int32 NumSplineSegments = Spline->GetNumberOfSplineSegments();
+	/*
+	if(NumSplineSegments == 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("NumSplineSegments is 0"));
+		return;
+	}
+*/
+	// 生成每条Spline Mesh的随机首尾宽度
+	const  float RandomStartWidth = RandomStream.FRandRange(StartWidthRange.X, StartWidthRange.Y);  
+	const  float RandomEndWidth = RandomStream.FRandRange(EndWidthRange.X, EndWidthRange.Y);  
+	const  float Step = (RandomEndWidth - RandomStartWidth)/NumSplineSegments;
+
+	// 初始宽度设为随机开始宽度或上一段的结束宽度
+	 float SplineMeshStartWidth = (LastSegmentEndWidth != 0.0f) ? LastSegmentEndWidth : RandomStartWidth;
+	 float SplineMeshEndWidth = SplineMeshStartWidth + Step;
+	
+	for(int32 i = 0; i < NumSplineSegments; ++i)
+	{
+		
+		FVector StartPos, StartTangent, EndPos, EndTangent;
+		Spline->GetLocationAndTangentAtSplinePoint(i, StartPos, StartTangent, ESplineCoordinateSpace::Local);
+		Spline->GetLocationAndTangentAtSplinePoint(i + 1, EndPos, EndTangent, ESplineCoordinateSpace::Local);
+		//Spline->bShouldVisualizeScale = true;
+		
+		USplineMeshComponent* SplineMesh = NewObject<USplineMeshComponent>(this, USplineMeshComponent::StaticClass());
+		SplineMesh->SetStaticMesh(Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(),nullptr,TEXT("/Engine/EditorLandscapeResources/SplineEditorMesh"))));
+		SplineMesh->SetStartAndEnd(StartPos, StartTangent, EndPos, EndTangent);
+
+		//设置SplineMesh宽度
+		SplineMesh->SetStartScale(FVector2d(SplineMeshStartWidth,SplineMeshStartWidth),true);
+		SplineMesh->SetEndScale(FVector2d(SplineMeshEndWidth,SplineMeshEndWidth),true);
+
+		// 存储这一段的结束宽度，以便下一段使用，上一段结束的宽度就是下一段开始的宽度
+		LastSegmentEndWidth = SplineMeshEndWidth;
+		
+		// 更新下一段的开始和结束宽度
+		SplineMeshStartWidth = SplineMeshEndWidth;
+		SplineMeshEndWidth += Step;
+		
+		SplineMesh->SetMobility(EComponentMobility::Movable);
+		SplineMesh->RegisterComponent();
+		SplineMesh->AttachToComponent(Spline, FAttachmentTransformRules::KeepRelativeTransform);  // 将Spline Mesh附加到Spline上
+		SplineMesh->SetVisibility(true, true);
+		//存储到内存，方便追踪和销毁
+		CachedSplineMeshComponents.Add(SplineMesh);
+
 	}
 	
 }
 
+
 void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePosition)
 {
+
 	USplineComponent** SplineComponentPtr = ParticleIDToSplineComponentMap.Find(ParticleID);
 	if(SplineComponentPtr)
 	{
@@ -304,6 +344,7 @@ void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePositio
 		WaterFallSpline->SetMobility(EComponentMobility::Movable);
 		WaterFallSpline->RegisterComponent();  // 注册组件，使其成为场景的一部分
 		WaterFallSpline->AttachToComponent(SceneRoot, FAttachmentTransformRules::KeepRelativeTransform);
+		WaterFallSpline->SetVisibility(true, true);
 		WaterFallSpline->ClearSplinePoints(true);
 		WaterFallSpline->AddSplinePointAtIndex(ParticlePosition,0, ESplineCoordinateSpace::World,true );
 
@@ -315,12 +356,15 @@ void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePositio
 		WaterFallSpline->EditorUnselectedSplineSegmentColor = RandomColor;
 		//UE_LOG(LogTemp,Warning,TEXT("Color : %s"),*RandomColor.ToString());
 		WaterFallSpline->EditorSelectedSplineSegmentColor=(FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
+
 #endif
 	}
 }
 
-void AWaterFall::ClearAllSpline()
+void AWaterFall::ClearAllResource()
 {
+	check(IsInGameThread());
+	
 	for(auto& ElementSpline: ParticleIDToSplineComponentMap)
 	{
 		USplineComponent* SplineComponent = ElementSpline.Value;
@@ -340,7 +384,21 @@ void AWaterFall::ClearAllSpline()
 	//清空TMap
 	ParticleIDToSplineComponentMap.Empty();
 	CachedSplineMeshComponents.Empty();
-	
+	UE_LOG(LogTemp, Warning, TEXT("Cleared all Spline and SplineMesh components"));
+}
+
+void AWaterFall::ClearAllSplineMesh()
+{
+	check(IsInGameThread());
+	for(USplineMeshComponent* SplineMeshComponent : CachedSplineMeshComponents)
+	{
+		if(SplineMeshComponent)
+		{
+			SplineMeshComponent->DestroyComponent();
+		}
+		
+	}
+	CachedSplineMeshComponents.Empty();
 }
 
 void AWaterFall::ResetParameters()
