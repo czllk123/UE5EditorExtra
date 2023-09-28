@@ -32,7 +32,8 @@ public class LinkExtra : ModuleRules
 				"UnrealEd",
 				"PropertyEditor",
 				"Niagara",
-				"NiagaraEditor"
+				"NiagaraEditor",
+				"MeshDescription"
 
 				// ... add other public dependencies that you statically link with here ...
 			}
