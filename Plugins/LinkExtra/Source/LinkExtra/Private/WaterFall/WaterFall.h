@@ -13,6 +13,10 @@
 #include "NiagaraDataSetDebugAccessor.h"
 #include "Components/SplineComponent.h"
 #include "Components/SplineMeshComponent.h"
+#include "MeshDescription.h"
+#include "MeshDescription/Public/MeshDescription.h"
+#include "MeshDescriptionClasses.h"
+
 #include "WaterFall.generated.h"
 
 
@@ -86,8 +90,7 @@ public:
 	UPROPERTY(Category="Simulate",BlueprintReadWrite)
 	bool bSimulateValid = true;
 
-	UPROPERTY()
-	bool IsRaining;
+
 	
 	//要获取的粒子的信息
 	TArray<FName> ParticlesVariables = {"UniqueID","Position",  "Velocity", "Age"};
@@ -95,6 +98,10 @@ public:
 	FNiagaraSystemInstance* StoreSystemInstance;
 	
 	EWaterFallButtonState GetSimulateStateValue(){ return SimulateState;}
+
+	//瀑布Mesh
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh")
+	UStaticMesh* WaterFallMesh;
 
 	//生成瀑布面片数量
 	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = " 1"), meta = (ClampMax = "100"))
@@ -111,13 +118,27 @@ public:
 	// 面片结束宽度范围
 	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh", BlueprintReadWrite, meta = (ClampMin = "5", ClampMax = "10"))
 	FVector2D EndWidthRange = FVector2D(5.0, 7.0);
+
+	//Spline重采样间距
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "10"))
+	float  RestLength = 2;
+
+	//Spline重采样点数量
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "100"))
+	int32 SampleNumber = 10;
+
+
+	/////////////////////////////////////////////////StaticMesh//////////////////////////////////////////////////////////////////////////
+
+	//将Spline上的SplineMesh转换成StaticMesh
+	
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 	
 	
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Spline", DisplayName="开始模拟")
-	void  StartSimulation();
+	void StartSimulation();
 
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Spline", DisplayName="停止模拟")
 	void StopSimulation();
@@ -140,14 +161,45 @@ protected:
 	void UpdateSplineComponent(int32 ParticleID, FVector ParticlePosition);
 	
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成SplineMesh")
-	void UpdateSplineMeshComponent(int32 ParticleID);
+	void UpdateSplineMeshComponent(USplineComponent* Spline);
 
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="清理资源")
 	void ClearAllResource();
 
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="清理所有Mesh")
 	void ClearAllSplineMesh();
+
+	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="重采样SplineTransform")
+	TArray<FVector> ResampleSplinePoints(USplineComponent* InSpline, float ResetLength);
+
+	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="重采样Spline")
+	TArray<FVector> ResampleSplinePointsWithNumber(USplineComponent* InSpline, int32 SampleNum);
+
+	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="重新生成重采样后的曲线")
+	void ReGenerateSplineAfterResample();
+
+	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="重新生成重采样后的曲线")
+	void ReGenerateSplineAfterResampleWithNumber();
+
+	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="SplineMeshToStaticMesh")
+	UStaticMesh* ConvertSplineMeshToStaticMesh(USplineMeshComponent* SplineMesh);
+
+	UFUNCTION(BlueprintCallable, Category="MeshDesription")
+	void FillMeshDescription(FMeshDescription& MeshDescription, FVector3f& Position, FVector3f& Normal, TArrayView<FVector2f>& UV, FVector& Triangles);
+
+#if WITH_EDITOR
+	DECLARE_EVENT(AWaterFall, FOnSplineDataChanged);
+	virtual void PostEditUndo() override;
+	//监视特定参数被更改后调用调用相应的函数更新结果
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+	
 private:
+#if WITH_EDITOR
+	FOnSplineDataChanged SplineDataChangedEvent;
+#endif
+
+	
 	/** Index of this instance in the system simulation. */
 	int32 SystemInstanceIndex;
 
@@ -167,6 +219,9 @@ private:
 
 	// 存储SplineMeshComponent的数组
 	TArray<USplineMeshComponent*> CachedSplineMeshComponents;
+	
+	//存储Spline原始长度，Resample时候用，每次计算样条点的时候都用原始长度算
+	TMap<USplineComponent*, float> CachedSplineOriginalLengths;
 	
 	// 储存所有发射器的粒子数据
 	TArray<FParticleData> ParticleDataArray;
