@@ -33,7 +33,9 @@ public class LinkExtra : ModuleRules
 				"PropertyEditor",
 				"Niagara",
 				"NiagaraEditor",
-				"MeshDescription"
+				"MeshDescription",
+				"StaticMeshDescription"
+
 
 				// ... add other public dependencies that you statically link with here ...
 			}

@@ -13,14 +13,16 @@
 #include "NiagaraDataSetDebugAccessor.h"
 #include "Components/SplineComponent.h"
 #include "Components/SplineMeshComponent.h"
+
 #include "MeshDescription.h"
-#include "MeshDescription/Public/MeshDescription.h"
-#include "MeshDescriptionClasses.h"
+#include "StaticMeshAttributes.h"
+
+
+#include "Engine/StaticMesh.h"
+#include "Components/StaticMeshComponent.h"
+
 
 #include "WaterFall.generated.h"
-
-
-
 
 
 UENUM()
@@ -182,11 +184,12 @@ protected:
 	void ReGenerateSplineAfterResampleWithNumber();
 
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="SplineMeshToStaticMesh")
-	UStaticMesh* ConvertSplineMeshToStaticMesh(USplineMeshComponent* SplineMesh);
+	UStaticMesh* ConvertSplineMeshToStaticMesh(TArray<USplineMeshComponent* >InSplineMeshComponents);
+	
+	void FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals, TArray<FVector2f>& UVs,  const TArray<int32>& Triangles);
 
-	UFUNCTION(BlueprintCallable, Category="MeshDesription")
-	void FillMeshDescription(FMeshDescription& MeshDescription, FVector3f& Position, FVector3f& Normal, TArrayView<FVector2f>& UV, FVector& Triangles);
-
+	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="生成新的StaticMesh")
+	void GenerateWaterMesh();
 #if WITH_EDITOR
 	DECLARE_EVENT(AWaterFall, FOnSplineDataChanged);
 	virtual void PostEditUndo() override;
@@ -219,6 +222,9 @@ private:
 
 	// 存储SplineMeshComponent的数组
 	TArray<USplineMeshComponent*> CachedSplineMeshComponents;
+
+	//存储每条Spline上对应的所有SplineMeshComponent, 重建StaticMesh用
+	TMap<USplineComponent*, TArray<USplineMeshComponent*>> CachedSplineToSplineMesh;;
 	
 	//存储Spline原始长度，Resample时候用，每次计算样条点的时候都用原始长度算
 	TMap<USplineComponent*, float> CachedSplineOriginalLengths;

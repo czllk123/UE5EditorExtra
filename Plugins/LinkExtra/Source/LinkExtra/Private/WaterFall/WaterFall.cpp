@@ -29,10 +29,11 @@
 #include "NiagaraSystem.h"
 #include "Components/SplineMeshComponent.h"
 #include "Components/SplineComponent.h"
-#include "Engine/StaticMesh.h"
-#include "MeshDescription.h"
+
 #include "StaticMeshAttributes.h"
-#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
+
+
 #include "PhysicsEngine/BodySetup.h"
 // Sets default values
 AWaterFall::AWaterFall()
@@ -518,81 +519,96 @@ TArray<FVector> AWaterFall::ResampleSplinePoints(USplineComponent* InSpline, flo
 	return Result;
 }
 
-void AWaterFall::FillMeshDescription(FMeshDescription& MeshDescription, FVector3f& Position, FVector3f& Normal,TArrayView<FVector2f>& UV, FVector& Triangles)
+void AWaterFall::FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals,TArray<FVector2f>& UVs,  const TArray<int32>& Triangles)
 {
 	FStaticMeshAttributes Attributes(MeshDescription);
 	Attributes.Register();
 
-	//Reserve Stuff
-	MeshDescription.ReserveNewVertices(Position.Size());
-	MeshDescription.ReserveNewVertexInstances(Position.Size());
+	MeshDescription.ReserveNewVertices(Positions.Num());
+	MeshDescription.ReserveNewVertexInstances(Positions.Num());
 
-	MeshDescription.CreatePolygonGroup();
-	MeshDescription.ReserveNewPolygons(Triangles.Size() / 3);
-	MeshDescription.ReserveNewTriangles(Triangles.Size() / 3);
-	MeshDescription.ReserveNewEdges(Triangles.Size());
+	FPolygonGroupID PolygonGroupID = MeshDescription.CreatePolygonGroup();
 
-	for(int v = 0; v < Position.Size(); v++)
+	MeshDescription.ReserveNewPolygons(Triangles.Num() / 3);
+	MeshDescription.ReserveNewTriangles(Triangles.Num() / 3);
+	MeshDescription.ReserveNewEdges(Triangles.Num());
+
+	// Populate Vertex, VertexInstance Data
+	TArray<FVertexID> CreatedVertexIDs;
+	CreatedVertexIDs.Reserve(Positions.Num());
+	TArray<FVertexInstanceID> CreatedVertexInstanceIDs;
+	CreatedVertexInstanceIDs.Reserve(Positions.Num());
+
+	for (int32 VertexIndex = 0; VertexIndex < Positions.Num(); ++VertexIndex)
 	{
-		MeshDescription.CreateVertex();
-		MeshDescription.CreateVertexInstance(v);
+		FVertexID VertexID = MeshDescription.CreateVertex();
+		CreatedVertexIDs.Add(VertexID);
+		Attributes.GetVertexPositions()[VertexID] = Positions[VertexIndex];
+
+		FVertexInstanceID VertexInstanceID = MeshDescription.CreateVertexInstance(VertexID);
+		CreatedVertexInstanceIDs.Add(VertexInstanceID);
+		Attributes.GetVertexInstanceUVs().Set(VertexInstanceID, 0, UVs[VertexIndex]);
+		Attributes.GetVertexInstanceNormals().Set(VertexInstanceID, Normals[VertexIndex]);
 	}
 
-	//Fill Triangles Data
-	for(int i = 0; i < Triangles.Size(); i+= 3)
+	// Populate Triangle Data
+	for (int32 TriangleIndex = 0; TriangleIndex < Triangles.Num(); TriangleIndex += 3)
 	{
-		MeshDescription.CreateTriangle(0, { Triangles[i],Triangles[i + 1] ,Triangles[i + 2] });
-	}
-
-	//Fill Vertex Data
-	auto Positions = MeshDescription.GetVertexPositions().GetRawArray();
-	auto UVs = MeshDescription.VertexInstanceAttributes().GetAttributesRef<FVector2f>(MeshAttribute::VertexInstance::TextureCoordinate).GetRawArray();
-	auto Normals = MeshDescription.VertexInstanceAttributes().GetAttributesRef<FVector3f>(MeshAttribute::VertexInstance::Normal).GetRawArray();
-
-	for(int v = 0; v < Position.Size(); ++v)
-	{
-		UVs[v] = UV[v];
-		Positions[v] = Position[v];
-		Normals[v] = Normal[v];
+		TArray<FVertexInstanceID> TriangleVertexInstances = {
+			CreatedVertexInstanceIDs[Triangles[TriangleIndex]],
+			CreatedVertexInstanceIDs[Triangles[TriangleIndex + 1]],
+			CreatedVertexInstanceIDs[Triangles[TriangleIndex + 2]]
+		};
+		MeshDescription.CreateTriangle(PolygonGroupID, TriangleVertexInstances);
 	}
 }
 
 
-UStaticMesh* AWaterFall::ConvertSplineMeshToStaticMesh(USplineMeshComponent* SplineMesh)
+UStaticMesh* AWaterFall::ConvertSplineMeshToStaticMesh(TArray<USplineMeshComponent* >InSplineMeshComponents)
 {
-	if(!SplineMesh)return nullptr;
-
-	UStaticMesh* SourceMesh = SplineMesh->GetStaticMesh();
-	if(!SourceMesh)return nullptr;
+	TArray<FVector3f> CombinedVertices;
+	TArray<FVector2f> CombinedUVs;
+	TArray<int32> CombinedTriangles;
 	
-	// 获取SplineMesh的原始数据
-	FStaticMeshSourceModel& SrcModel = SourceMesh->GetSourceModel(0);
-	FStaticMeshSourceModel NewModel;
-
-	//目前只处理LOD0
-	const FStaticMeshLODResources& SrcLOD = SourceMesh->GetLODForExport(0);
-
-	// Vertices and UVs
-	TArray<FVector3f> Vertices;
-	TArray<FVector2f> UVs;
-	for(int32 i = 0; i < SrcLOD.VertexBuffers.PositionVertexBuffer.GetNumVertices(); i++)
+	int32 VertexIdOffset = 0; // 记录当前的顶点索引偏移，这是为了更新三角形的索引，假设第一个SplineMesh索引为0，1，2， 第二个就得是3，4，5
+	
+	for(USplineMeshComponent* SplineMesh : InSplineMeshComponents)
 	{
-		Vertices.Add(SrcLOD.VertexBuffers.PositionVertexBuffer.VertexPosition(i));
-		UVs.Add(SrcLOD.VertexBuffers.StaticMeshVertexBuffer.GetVertexUV(i, 0));
+		if(!SplineMesh)return nullptr; 
+		UStaticMesh* SourceMesh = SplineMesh->GetStaticMesh();
+		if(!SourceMesh)return  nullptr;
+
+		//获取SplineMesh的原始数据, 目前只处理LOD0
+		const FStaticMeshLODResources& SrcLOD = SourceMesh->GetLODForExport(0);
+		
+		// 添加顶点和UVs
+		for(uint32 i = 0; i < SrcLOD.VertexBuffers.PositionVertexBuffer.GetNumVertices(); i++)
+		{
+	
+			const FVector3f LocalPosition = SrcLOD.VertexBuffers.PositionVertexBuffer.VertexPosition(i);
+			const FVector WorldPosition = SplineMesh->GetComponentToWorld().TransformPosition(static_cast<FVector>(LocalPosition));
+			
+			UE_LOG(LogTemp, Warning, TEXT("Transformed Vertex: %s"), *WorldPosition.ToString());
+			
+			CombinedVertices.Add(static_cast<FVector3f>(WorldPosition));
+			CombinedUVs.Add(SrcLOD.VertexBuffers.StaticMeshVertexBuffer.GetVertexUV(i, 0));
+		}
+		
+		// 添加三角形并更新索引
+		FIndexArrayView Indices = SrcLOD.IndexBuffer.GetArrayView();
+		for(int32 i = 0; i < Indices.Num(); i++)
+		{
+			CombinedTriangles.Add(Indices[i] + VertexIdOffset);
+		}
+
+		// 更新顶点偏移，为下一个SplineMeshComponent准备
+		VertexIdOffset += SrcLOD.VertexBuffers.PositionVertexBuffer.GetNumVertices();
+
 	}
-
-	// Triangles
-	TArray<int32> Triangles;
-	FIndexArrayView Indices = SrcLOD.IndexBuffer.GetArrayView();
-	for(int32 i = 0; i < Indices.Num(); i++)
-	{
-		Triangles.Add(Indices[i]);
-	}
-
-
+	
 	//创建一个新的MeshDescription
 	FMeshDescription MeshDescription;
-	FillMeshDescription(MeshDescription, Vertices, Vertices, UVs, Triangles);
+	FillMeshDescription(MeshDescription, CombinedVertices, CombinedVertices, CombinedUVs, CombinedTriangles);
 
 	// 创建一个新的StaticMesh实例
 	UStaticMesh* NewStaticMesh = NewObject<UStaticMesh>(this, FName("WaterFallMesh"));
@@ -603,7 +619,7 @@ UStaticMesh* AWaterFall::ConvertSplineMeshToStaticMesh(USplineMeshComponent* Spl
 	UStaticMesh::FBuildMeshDescriptionsParams MeshDescriptionParams;
 	NewStaticMesh->BuildFromMeshDescriptions({ &MeshDescription }, MeshDescriptionParams);
 
-	return NewStaticMesh;
+	return  NewStaticMesh;
 	/*
 	int32 VertexIndex = 0;
 	TArrayView<FVertexInstanceID> VertexInstanceIDs;
@@ -637,10 +653,47 @@ UStaticMesh* AWaterFall::ConvertSplineMeshToStaticMesh(USplineMeshComponent* Spl
 	NewStaticMesh->PostEditChange();
 */
 
-	
 }
 
+void AWaterFall::GenerateWaterMesh()
+{
+	CachedSplineToSplineMesh.Empty();
 
+	//为生成StaticMesh准备SplineMesh数组，每条Spline上对应那些SplineMesh得有区分
+	for(USplineMeshComponent* InSplineMesh : CachedSplineMeshComponents)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SplineMesh Location: %s"), *InSplineMesh->GetComponentLocation().ToString());
+		UE_LOG(LogTemp, Warning, TEXT("SplineMesh Rotation: %s"), *InSplineMesh->GetComponentRotation().ToString());
+		
+		// 获取这个SplineMeshComponent对应的Spline
+		USplineComponent* RelatedSpline = Cast<USplineComponent>(InSplineMesh->GetAttachParent());
+		if (RelatedSpline)
+		{
+			CachedSplineToSplineMesh.FindOrAdd(RelatedSpline).Add(InSplineMesh);
+		}
+	}
+	
+	for(const auto& SplineMeshPair : CachedSplineToSplineMesh)
+	{
+		const USplineComponent* SplineComponent = SplineMeshPair.Key;
+		UE_LOG(LogTemp,Error,TEXT("Spline : %s"),*SplineComponent->GetName());
+		
+		const TArray<USplineMeshComponent*> SplineMeshComponents = SplineMeshPair.Value;
+		
+		UStaticMesh* NewMesh  = ConvertSplineMeshToStaticMesh(SplineMeshComponents);
+		if(NewMesh)
+		{
+			AStaticMeshActor* MeshActor = GetWorld()->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), SplineComponent->GetRelativeLocation(), SplineComponent->GetRelativeRotation());
+		
+			if(MeshActor)
+			{
+				MeshActor->GetStaticMeshComponent()->SetStaticMesh(NewMesh);
+				MeshActor->ReregisterAllComponents();
+			}
+		}
+	}
+	
+}
 
 
 void AWaterFall::ResetParameters()
