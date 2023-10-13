@@ -201,6 +201,9 @@ protected:
 	UFUNCTION(Category = "WaterFall|Save", DisplayName="保存StaticMesh到磁盘")
 	static UStaticMesh* SaveAssetToDisk(const UStaticMesh* InStaticMesh,  const FString& StaticMeshName, const FString& SaveRelativePath);
 
+	//偏移SplineMesh的UV,让UV可以连续，而不是重复，可能还需要旋转90度，来适应shader
+	UFUNCTION(Category= "WaterFall|Spline", DisplayName="计算SplinMesh的UV偏移")
+	FVector2f CalculateUVOffsetBasedOnSpline(const USplineComponent* SplineComponent, const USplineMeshComponent* SplineMeshComponent);
 	
 	//UFUNCTION(Category="Mesh",DisplayName="保存资产到磁盘")
 	//void SaveStaticMeshToDisk(UStaticMesh* InStaticMesh);
