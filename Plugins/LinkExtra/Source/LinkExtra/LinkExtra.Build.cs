@@ -60,6 +60,7 @@ public class LinkExtra : ModuleRules
 				"FoliageEdit", 
 				"Niagara",
 				"NiagaraEditor"
+
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

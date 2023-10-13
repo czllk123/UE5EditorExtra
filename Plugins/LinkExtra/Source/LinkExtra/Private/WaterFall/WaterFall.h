@@ -101,8 +101,8 @@ public:
 	
 	EWaterFallButtonState GetSimulateStateValue(){ return SimulateState;}
 
-	//瀑布Mesh
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh")
+	//瀑布SplineMesh引用的StaticMesh
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh", DisplayName="输入生成瀑布的静态网格")
 	UStaticMesh* WaterFallMesh;
 
 	//生成瀑布面片数量
@@ -129,10 +129,14 @@ public:
 	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "100"))
 	int32 SampleNumber = 10;
 
+	//资产名称
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Save",DisplayName="资产名称")
+	FString MeshName = "WaterFallMesh";
 
-	/////////////////////////////////////////////////StaticMesh//////////////////////////////////////////////////////////////////////////
+	//保存路径
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Save",DisplayName="保存路径")
+	FString SavePath = "/Game/BP/";
 
-	//将Spline上的SplineMesh转换成StaticMesh
 	
 protected:
 	// Called when the game starts or when spawned
@@ -157,13 +161,13 @@ protected:
 	void GenerateWaterFallSpline();
 
 	UFUNCTION(BlueprintCallable,CallInEditor,Category="WaterFall", DisplayName="生成SplineMesh")
-	void GenerateWaterFallMesh();
+	void GenerateSplineMesh();
 	
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成Spline曲线")
 	void UpdateSplineComponent(int32 ParticleID, FVector ParticlePosition);
 	
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成SplineMesh")
-	void UpdateSplineMeshComponent(USplineComponent* Spline);
+	TArray<USplineMeshComponent*> UpdateSplineMeshComponent(USplineComponent* Spline);
 
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="清理资源")
 	void ClearAllResource();
@@ -171,6 +175,9 @@ protected:
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="清理所有Mesh")
 	void ClearAllSplineMesh();
 
+	UFUNCTION(Category="Mesh",DisplayName="销毁StaticMeshActor")
+	void DestroyWaterFallMeshActor();
+	
 	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="重采样SplineTransform")
 	TArray<FVector> ResampleSplinePoints(USplineComponent* InSpline, float ResetLength);
 
@@ -184,12 +191,22 @@ protected:
 	void ReGenerateSplineAfterResampleWithNumber();
 
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="SplineMeshToStaticMesh")
-	UStaticMesh* ConvertSplineMeshToStaticMesh(TArray<USplineMeshComponent* >InSplineMeshComponents);
+	UStaticMesh* RebuildStaticMeshFromSplineMesh();
 	
-	void FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals, TArray<FVector2f>& UVs,  const TArray<int32>& Triangles);
-
+	static void FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals, TArray<FVector2f>& UVs,  const TArray<int32>& Triangles);
+	
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="生成新的StaticMesh")
-	void GenerateWaterMesh();
+	void RebuildWaterFallMesh();
+
+	UFUNCTION(Category = "WaterFall|Save", DisplayName="保存StaticMesh到磁盘")
+	static UStaticMesh* SaveAssetToDisk(const UStaticMesh* InStaticMesh,  const FString& StaticMeshName, const FString& SaveRelativePath);
+
+	
+	//UFUNCTION(Category="Mesh",DisplayName="保存资产到磁盘")
+	//void SaveStaticMeshToDisk(UStaticMesh* InStaticMesh);
+
+
+	
 #if WITH_EDITOR
 	DECLARE_EVENT(AWaterFall, FOnSplineDataChanged);
 	virtual void PostEditUndo() override;
@@ -221,10 +238,11 @@ private:
 	TMap<int32, USplineComponent*> ParticleIDToSplineComponentMap;
 
 	// 存储SplineMeshComponent的数组
-	TArray<USplineMeshComponent*> CachedSplineMeshComponents;
+	//TArray<USplineMeshComponent*> CachedSplineMeshComponents;
+	
 
 	//存储每条Spline上对应的所有SplineMeshComponent, 重建StaticMesh用
-	TMap<USplineComponent*, TArray<USplineMeshComponent*>> CachedSplineToSplineMesh;;
+	TMap<USplineComponent*, TArray<USplineMeshComponent*>> CachedSplineAndSplineMeshes;
 	
 	//存储Spline原始长度，Resample时候用，每次计算样条点的时候都用原始长度算
 	TMap<USplineComponent*, float> CachedSplineOriginalLengths;
@@ -233,7 +251,14 @@ private:
 	TArray<FParticleData> ParticleDataArray;
 
 	// 最近一个段落的结束宽度
-	float LastSegmentEndWidth = 0.0f; 
+	float LastSegmentEndWidth = 0.0f;
+	
+
+	//重建StaticMesh的Actor,用来存储和销毁
+	AStaticMeshActor* RebuildedStaticMeshActor = nullptr;
+
+	//先在RebuildStaticMeshFromSplineMesh函数中设置StaticMesh的默认材质,再保存资产
+	UMaterialInterface* DefaultMaterial = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, TEXT("/Game/BP/Materials/Checker_Mat.Checker_Mat")));
 	
 public:
 	// Called every frame

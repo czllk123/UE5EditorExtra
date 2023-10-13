@@ -2,6 +2,8 @@
 
 
 #include "WaterFall.h"
+
+#include "AssetToolsModule.h"
 #include "Editor.h"
 
 #include "NiagaraSystemInstanceController.h"
@@ -31,10 +33,16 @@
 #include "Components/SplineComponent.h"
 
 #include "StaticMeshAttributes.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/StaticMeshActor.h"
 
 
 #include "PhysicsEngine/BodySetup.h"
+
+#include "UObject/SavePackage.h"
+
+
+
 // Sets default values
 AWaterFall::AWaterFall()
 {
@@ -244,7 +252,7 @@ void AWaterFall::GenerateWaterFallSpline()
 {
 	//由于DataBuffer是在间隔时间内传输多个粒子数据，所以绘制spline的时候不需要之前的数据，要清空ParticleDataArray
 	ParticleDataArray.Empty();
-	CachedSplineMeshComponents.Empty();
+
 	//间隔时间内收集DataBuffer
 	CollectionParticleDataBuffer();
 	//绘制spline
@@ -254,14 +262,16 @@ void AWaterFall::GenerateWaterFallSpline()
 		
 	}
 }
-void AWaterFall::GenerateWaterFallMesh()
+void AWaterFall::GenerateSplineMesh()
 {
 	ClearAllSplineMesh();
 	//暂且在这个地方调用,因为不需要每帧绘制，所以不能像spline那样
 	for(auto& SplinePair : CachedSplineOriginalLengths)
 	{
-		USplineComponent* Spline = SplinePair.Key;
-		UpdateSplineMeshComponent(Spline);
+		USplineComponent* InSpline = SplinePair.Key;
+		TArray<USplineMeshComponent*> SplineMeshes = UpdateSplineMeshComponent(InSpline);
+		//将splineMesh和对应的Spline 存储起来，重建Mesh用
+		CachedSplineAndSplineMeshes.Add(InSpline, SplineMeshes);
 	}
 
 }
@@ -309,8 +319,9 @@ void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePositio
 
 
 //TODO 后期考虑缓存一个spline,进行分簇筛选和重采样后再生成Mesh
-void AWaterFall::UpdateSplineMeshComponent(USplineComponent* Spline)
+TArray<USplineMeshComponent*> AWaterFall::UpdateSplineMeshComponent(USplineComponent* Spline)
 {
+	
 	//重置之前存的结束宽度，否则生成的曲线会越来越宽
 	LastSegmentEndWidth = 0.0f;
 	int32 NumSplineSegments = Spline->GetNumberOfSplineSegments();
@@ -323,7 +334,10 @@ void AWaterFall::UpdateSplineMeshComponent(USplineComponent* Spline)
 	// 初始宽度设为随机开始宽度或上一段的结束宽度
 	float SplineMeshStartWidth = (LastSegmentEndWidth != 0.0f) ? LastSegmentEndWidth : RandomStartWidth;
 	float SplineMeshEndWidth = SplineMeshStartWidth + Step;
-	
+
+	//把生成的SplineMesh返回出去，然后用Map根据SplineMesh属于哪条Spline存储起来，重建Mesh用。
+	TArray<USplineMeshComponent*> TempSplineMesh;
+	TempSplineMesh.Empty();
 	for(int32 i = 0; i < NumSplineSegments; ++i)
 	{
 		FVector StartPos, StartTangent, EndPos, EndTangent;
@@ -355,21 +369,21 @@ void AWaterFall::UpdateSplineMeshComponent(USplineComponent* Spline)
 		SplineMeshEndWidth += Step;
 		
 		SplineMesh->SetMobility(EComponentMobility::Movable);
-		SplineMesh->RegisterComponent();
 		SplineMesh->AttachToComponent(Spline, FAttachmentTransformRules::KeepRelativeTransform);  // 将Spline Mesh附加到Spline上
+		SplineMesh->RegisterComponent();
 		SplineMesh->SetVisibility(true, true);
-		//存储到内存，方便追踪和销毁
-		CachedSplineMeshComponents.Add(SplineMesh);
+
+		TempSplineMesh.Add(SplineMesh);
 	}
-	
+	return TempSplineMesh;
 }
 
 
 void AWaterFall::ClearAllResource()
 {
 	check(IsInGameThread());
-	
-	for(auto& ElementSpline: ParticleIDToSplineComponentMap)
+	DestroyWaterFallMeshActor();
+	for(const auto& ElementSpline: ParticleIDToSplineComponentMap)
 	{
 		USplineComponent* SplineComponent = ElementSpline.Value;
 		if(SplineComponent)
@@ -377,17 +391,13 @@ void AWaterFall::ClearAllResource()
 			SplineComponent->DestroyComponent();
 		}
 	}
-	for(USplineMeshComponent* SplineMeshComponent : CachedSplineMeshComponents)
-	{
-		if(SplineMeshComponent)
-		{
-			SplineMeshComponent->DestroyComponent();
-		}
-		
-	}
-	//清空TMap
+
+	//清理SplineMesh和TMap
+	ClearAllSplineMesh();
+	CachedSplineAndSplineMeshes.Empty();
+	
+	//清空Spline相关的TMap
 	ParticleIDToSplineComponentMap.Empty();
-	CachedSplineMeshComponents.Empty();
 	CachedSplineOriginalLengths.Empty();
 	UE_LOG(LogTemp, Warning, TEXT("Cleared all Spline and SplineMesh components"));
 }
@@ -395,14 +405,28 @@ void AWaterFall::ClearAllResource()
 void AWaterFall::ClearAllSplineMesh()
 {
 	check(IsInGameThread());
-	for(USplineMeshComponent* SplineMeshComponent : CachedSplineMeshComponents)
+	for(const auto& ElementSplineMesh: CachedSplineAndSplineMeshes)
 	{
-		if(SplineMeshComponent)
+		TArray<USplineMeshComponent* >SplineMeshComponents = ElementSplineMesh.Value;
+		for(USplineMeshComponent* SplineMeshComponent : SplineMeshComponents)
 		{
-			SplineMeshComponent->DestroyComponent();
+			if(SplineMeshComponent)
+			{
+				SplineMeshComponent->DestroyComponent();
+			}
 		}
 	}
-	CachedSplineMeshComponents.Empty();
+	CachedSplineAndSplineMeshes.Empty();	
+
+}
+
+void AWaterFall::DestroyWaterFallMeshActor()
+{
+	if(RebuildedStaticMeshActor)
+	{
+		RebuildedStaticMeshActor->Destroy();
+		RebuildedStaticMeshActor = nullptr;
+	} 
 }
 
 void AWaterFall::ReGenerateSplineAfterResample()
@@ -420,7 +444,6 @@ void AWaterFall::ReGenerateSplineAfterResample()
 		InSpline->SetMobility(EComponentMobility::Movable);
 		InSpline->AttachToComponent(SceneRoot, FAttachmentTransformRules::KeepRelativeTransform);
 		InSpline->SetVisibility(true, true);
-		UE_LOG(LogTemp, Error, TEXT("============================================"));
 		PerSplineLocation.Empty();
 	}
 }
@@ -438,7 +461,6 @@ void AWaterFall::ReGenerateSplineAfterResampleWithNumber()
 		InSpline->SetMobility(EComponentMobility::Movable);
 		InSpline->AttachToComponent(SceneRoot, FAttachmentTransformRules::KeepRelativeTransform);
 		InSpline->SetVisibility(true, true);
-		UE_LOG(LogTemp, Error, TEXT("============================================"));
 		PerSplineLocation.Empty();
 	}
 }
@@ -564,135 +586,228 @@ void AWaterFall::FillMeshDescription(FMeshDescription& MeshDescription, const TA
 }
 
 
-UStaticMesh* AWaterFall::ConvertSplineMeshToStaticMesh(TArray<USplineMeshComponent* >InSplineMeshComponents)
+UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 {
-	TArray<FVector3f> CombinedVertices;
-	TArray<FVector2f> CombinedUVs;
-	TArray<int32> CombinedTriangles;
 	
-	int32 VertexIdOffset = 0; // 记录当前的顶点索引偏移，这是为了更新三角形的索引，假设第一个SplineMesh索引为0，1，2， 第二个就得是3，4，5
+	TMap<int32, TArray<FVector3f>> LODCombinedVertices;
+	TMap<int32, TArray<FVector3f>> LODCombinedNormals;
+	TMap<int32, TArray<FVector2f>> LODCombinedUVs;
+	TMap<int32, TArray<int32>> LODCombinedTriangles;
+	TMap<int32, int32> LODVertexCounts; //记录每个LOD的顶点数量
+
+	TArray<TUniquePtr<FMeshDescription>> AllLODMeshDescriptions;
 	
-	for(USplineMeshComponent* SplineMesh : InSplineMeshComponents)
+	//遍历每条Spline
+	for(const auto& SplineMeshPair : CachedSplineAndSplineMeshes)
 	{
-		if(!SplineMesh)return nullptr; 
-		UStaticMesh* SourceMesh = SplineMesh->GetStaticMesh();
-		if(!SourceMesh)return  nullptr;
-
-		//获取SplineMesh的原始数据, 目前只处理LOD0
-		const FStaticMeshLODResources& SrcLOD = SourceMesh->GetLODForExport(0);
 		
-		// 添加顶点和UVs
-		for(uint32 i = 0; i < SrcLOD.VertexBuffers.PositionVertexBuffer.GetNumVertices(); i++)
-		{
-	
-			const FVector3f LocalPosition = SrcLOD.VertexBuffers.PositionVertexBuffer.VertexPosition(i);
-			const FVector WorldPosition = SplineMesh->GetComponentToWorld().TransformPosition(static_cast<FVector>(LocalPosition));
-			
-			UE_LOG(LogTemp, Warning, TEXT("Transformed Vertex: %s"), *WorldPosition.ToString());
-			
-			CombinedVertices.Add(static_cast<FVector3f>(WorldPosition));
-			CombinedUVs.Add(SrcLOD.VertexBuffers.StaticMeshVertexBuffer.GetVertexUV(i, 0));
-		}
+		const USplineComponent* SplineComponent = SplineMeshPair.Key;
+		if(!SplineComponent)continue; 
+
+		//获取每条Spline的长度,来计算UV的V值
+		const float OriginalSplineLength = CachedSplineOriginalLengths[SplineComponent];
 		
-		// 添加三角形并更新索引
-		FIndexArrayView Indices = SrcLOD.IndexBuffer.GetArrayView();
-		for(int32 i = 0; i < Indices.Num(); i++)
+		//获取Spline上对应的多个SplineMesh
+		const TArray<USplineMeshComponent*> SplineMeshComponents = SplineMeshPair.Value;
+		//int32 VertexIdOffset = 0; // 记录当前的顶点索引偏移，这是为了更新三角形的索引，假设第一个SplineMesh索引为0，1，2， 第二个就得是3，4，5
+		
+		//遍历每条Spline中所有的SplineMesh,获取顶点Buffer
+		for(USplineMeshComponent* SplineMesh : SplineMeshComponents)
 		{
-			CombinedTriangles.Add(Indices[i] + VertexIdOffset);
+			
+			if(!SplineMesh)continue; 
+			UStaticMesh* SourceMesh = SplineMesh->GetStaticMesh();//拿到SplineMesh引用的StaticMesh
+			if(!SourceMesh)continue;
+			
+			//遍历每个SplineMesh的每级LOD,提取vertexBuffer
+			for(int32 LODIndex = 0; LODIndex < SourceMesh->GetNumLODs(); LODIndex++)
+			{
+
+				const FStaticMeshLODResources& LODResource = SourceMesh->GetLODForExport(LODIndex);
+				
+				int32& CurrentVertexCount = LODVertexCounts.FindOrAdd(LODIndex);
+
+				TArray<FVector3f>& CurrentLODVertices = LODCombinedVertices.FindOrAdd(LODIndex);
+				TArray<FVector3f>& CurrentLODNormals = LODCombinedNormals.FindOrAdd(LODIndex);
+				TArray<FVector2f>& CurrentLODUVs = LODCombinedUVs.FindOrAdd(LODIndex);
+				TArray<int32>& CurrentLODTriangles = LODCombinedTriangles.FindOrAdd(LODIndex);
+				
+				// 添加顶点和UVs
+				for(uint32 i = 0; i < LODResource.VertexBuffers.PositionVertexBuffer.GetNumVertices(); i++)
+				{
+					FVector3f LocalPosition = LODResource.VertexBuffers.PositionVertexBuffer.VertexPosition(i);
+
+					//求一个切变变换应用到顶点上
+					float& AxisValue = USplineMeshComponent::GetAxisValueRef(LocalPosition, SplineMesh->ForwardAxis);
+					const FTransform SliceTransform = SplineMesh->CalcSliceTransform(AxisValue);
+					AxisValue = 0.0f;
+
+					// Apply spline deformation for  vertex position
+					FVector DeformedPosition = SliceTransform.TransformPosition(static_cast<FVector>(LocalPosition));
+					const FVector WorldPosition = SplineMesh->GetComponentToWorld().TransformPosition(DeformedPosition);
+					CurrentLODVertices.Add(static_cast<FVector3f>(WorldPosition));
+					
+
+					// Apply spline deformation for  vertex Normal
+					FVector3f LocalNormal = LODResource.VertexBuffers.StaticMeshVertexBuffer.VertexTangentZ(i);
+					FVector WorldNormal = SplineMesh->GetComponentToWorld().TransformVectorNoScale(static_cast<FVector>(LocalNormal));
+					FVector DeformedNormal = SliceTransform.TransformVector(WorldNormal).GetSafeNormal();
+					CurrentLODNormals.Add(static_cast<FVector3f>(DeformedNormal));
+					
+					FVector2f OriginalUV = LODResource.VertexBuffers.StaticMeshVertexBuffer.GetVertexUV(i, 0);
+					CurrentLODUVs.Add(OriginalUV);
+				}
+				// 添加三角形并更新索引
+				FIndexArrayView Indices = LODResource.IndexBuffer.GetArrayView();
+				for(int32 i = 0; i < Indices.Num(); i++)
+				{
+					CurrentLODTriangles.Add(Indices[i] + CurrentVertexCount);
+				}
+				// 更新这个LOD的顶点计数
+				CurrentVertexCount += LODResource.VertexBuffers.PositionVertexBuffer.GetNumVertices();
+			}
 		}
+	}
 
-		// 更新顶点偏移，为下一个SplineMeshComponent准备
-		VertexIdOffset += SrcLOD.VertexBuffers.PositionVertexBuffer.GetNumVertices();
-
+	// 为每个LOD创建一个FMeshDescription
+	for(auto& PerLODPair : LODCombinedVertices)
+	{
+		auto LODIndex = PerLODPair.Key;
+		TUniquePtr<FMeshDescription> MeshDescription = MakeUnique<FMeshDescription>();
+		FillMeshDescription(*MeshDescription, LODCombinedVertices[LODIndex],
+			LODCombinedNormals[LODIndex],
+			LODCombinedUVs[LODIndex],
+			LODCombinedTriangles[LODIndex]);
+		AllLODMeshDescriptions.Add(MoveTemp(MeshDescription));
 	}
 	
-	//创建一个新的MeshDescription
-	FMeshDescription MeshDescription;
-	FillMeshDescription(MeshDescription, CombinedVertices, CombinedVertices, CombinedUVs, CombinedTriangles);
-
 	// 创建一个新的StaticMesh实例
-	UStaticMesh* NewStaticMesh = NewObject<UStaticMesh>(this, FName("WaterFallMesh"));
+	UStaticMesh* NewStaticMesh = NewObject<UStaticMesh>(this, FName("WaterFallMesh"), EObjectFlags::RF_Public | EObjectFlags::RF_Standalone);
+	NewStaticMesh->InitResources();
+
+	//设置默认材质
+	FStaticMaterial NewMaterialSlot(DefaultMaterial);
+	NewStaticMesh->GetStaticMaterials().Add(NewMaterialSlot);
+	NewStaticMesh->PostEditChange();
+	
 	NewStaticMesh->SetRenderData(MakeUnique<FStaticMeshRenderData>());
 	NewStaticMesh->CreateBodySetup();
 	NewStaticMesh->bAllowCPUAccess = true;
 	NewStaticMesh->GetBodySetup()->CollisionTraceFlag = ECollisionTraceFlag::CTF_UseComplexAsSimple;
+	
 	UStaticMesh::FBuildMeshDescriptionsParams MeshDescriptionParams;
-	NewStaticMesh->BuildFromMeshDescriptions({ &MeshDescription }, MeshDescriptionParams);
-
-	return  NewStaticMesh;
-	/*
-	int32 VertexIndex = 0;
-	TArrayView<FVertexInstanceID> VertexInstanceIDs;
-	for(const FVector3f& Vertex : Vertices)
+	MeshDescriptionParams.bBuildSimpleCollision = true;
+	MeshDescriptionParams.bFastBuild =true;
+	
+	TArray<const FMeshDescription*> ConstMeshDescriptions;
+	for(const TUniquePtr<FMeshDescription>& Desc : AllLODMeshDescriptions)
 	{
-		const FVertexInstanceID VertexInstanceID = MeshDescription.CreateVertexInstance(MeshDescription.CreateVertex());
-		VertexInstanceIDs
-		Attributes.GetVertexInstanceUVs().Set(VertexInstanceID, UV0[VertexIndex]);
-		VertexIndex++;
+		ConstMeshDescriptions.Add(Desc.Get());//使用Desc.Get()从TUniquePtr中获取FMeshDescription的原始指针，并将其添加到ConstMeshDescriptions中
 	}
-
-	for (int32 i = 0; i < Triangles.Num(); i += 3)
+	NewStaticMesh->BuildFromMeshDescriptions(ConstMeshDescriptions, MeshDescriptionParams);
+	
+	//设置各个LOD相关属性,与SplineMesh 保持一致
+	for(int32 LODIndex = 0; LODIndex < NewStaticMesh->GetNumSourceModels(); LODIndex++)
 	{
-		FTriangleID TriangleID = MeshDescription.CreateTriangle(
-		VertexInstanceIDs[Triangles[i]],
-		VertexInstanceIDs[Triangles[i + 1]],
-		VertexInstanceIDs[Triangles[i + 2]]
-		);
+		//这里WaterFallMesh就是SplineMesh引用的StaticMesh
+		if(WaterFallMesh->GetNumSourceModels() > LODIndex)
+		{
+			NewStaticMesh->GetSourceModel(LODIndex).ScreenSize = WaterFallMesh->GetSourceModel(LODIndex).ScreenSize;
+			NewStaticMesh->GetSourceModel(LODIndex).BuildSettings.bRecomputeNormals = true;
+			NewStaticMesh->GetSourceModel(LODIndex).BuildSettings.bUseFullPrecisionUVs = true;
+			NewStaticMesh->GetSourceModel(LODIndex).BuildSettings.bRecomputeTangents = true;
+			NewStaticMesh->GetSourceModel(LODIndex).BuildSettings.bGenerateLightmapUVs = true;
+		}
 	}
-
-
-	NewModel.BuildSettings.bRecomputeNormals = true;
-	NewModel.BuildSettings.bRecomputeTangents = true;
-	NewModel.BuildSettings.bUseHighPrecisionTangentBasis = true;
-	NewModel.BuildSettings.bUseFullPrecisionUVs = true;
-	NewModel.BuildSettings.bGenerateLightmapUVs = true;
-	NewModel.ScreenSize = SrcModel.ScreenSize;
-
-	NewStaticMesh->AddSourceModel(NewModel);
-	NewStaticMesh->CreateMeshDescription(0, MoveTemp(MeshDescription));
 	NewStaticMesh->PostEditChange();
-*/
-
+	return  NewStaticMesh;
 }
 
-void AWaterFall::GenerateWaterMesh()
+void AWaterFall::RebuildWaterFallMesh()
 {
-	CachedSplineToSplineMesh.Empty();
+	
+	DestroyWaterFallMeshActor();
+	
+	//1.重建StaticMesh
+	UStaticMesh* RebuildStaticMesh  = RebuildStaticMeshFromSplineMesh();
 
-	//为生成StaticMesh准备SplineMesh数组，每条Spline上对应那些SplineMesh得有区分
-	for(USplineMeshComponent* InSplineMesh : CachedSplineMeshComponents)
+	if (!RebuildStaticMesh)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("SplineMesh Location: %s"), *InSplineMesh->GetComponentLocation().ToString());
-		UE_LOG(LogTemp, Warning, TEXT("SplineMesh Rotation: %s"), *InSplineMesh->GetComponentRotation().ToString());
-		
-		// 获取这个SplineMeshComponent对应的Spline
-		USplineComponent* RelatedSpline = Cast<USplineComponent>(InSplineMesh->GetAttachParent());
-		if (RelatedSpline)
-		{
-			CachedSplineToSplineMesh.FindOrAdd(RelatedSpline).Add(InSplineMesh);
-		}
+		UE_LOG(LogTemp, Warning, TEXT("Failed to rebuild StaticMesh."));
+		return;
 	}
-	
-	for(const auto& SplineMeshPair : CachedSplineToSplineMesh)
+
+	//2.保存该StaticMesh为资产
+	UStaticMesh* SavedStaticMesh = SaveAssetToDisk(RebuildStaticMesh, MeshName, SavePath);
+
+	// 3. 使用已保存的资产生成或更新场景中的AStaticMeshActor
+	if (!RebuildedStaticMeshActor)
 	{
-		const USplineComponent* SplineComponent = SplineMeshPair.Key;
-		UE_LOG(LogTemp,Error,TEXT("Spline : %s"),*SplineComponent->GetName());
-		
-		const TArray<USplineMeshComponent*> SplineMeshComponents = SplineMeshPair.Value;
-		
-		UStaticMesh* NewMesh  = ConvertSplineMeshToStaticMesh(SplineMeshComponents);
-		if(NewMesh)
-		{
-			AStaticMeshActor* MeshActor = GetWorld()->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), SplineComponent->GetRelativeLocation(), SplineComponent->GetRelativeRotation());
-		
-			if(MeshActor)
-			{
-				MeshActor->GetStaticMeshComponent()->SetStaticMesh(NewMesh);
-				MeshActor->ReregisterAllComponents();
-			}
-		}
+		RebuildedStaticMeshActor = GetWorld()->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), SceneRoot->GetComponentLocation(), SceneRoot->GetComponentRotation());
 	}
-	
+
+	//给RebuildedStaticMeshActor新建Component
+	UStaticMeshComponent* WaterFallMeshComponent = NewObject<UStaticMeshComponent>(RebuildedStaticMeshActor);
+	if(WaterFallMeshComponent)
+	{
+		const FStaticMeshLODResources& LODResource  = RebuildStaticMesh->GetLODForExport(0);
+		//UE_LOG(LogTemp, Error, TEXT("NewStaticMesh Vertex Count: %d"), LODResource.VertexBuffers.PositionVertexBuffer.GetNumVertices());
+		
+		WaterFallMeshComponent->AttachToComponent(RebuildedStaticMeshActor->GetRootComponent(), FAttachmentTransformRules::KeepWorldTransform);
+		
+		WaterFallMeshComponent->SetStaticMesh(SavedStaticMesh);
+		
+		WaterFallMeshComponent->RegisterComponent();
+		
+		WaterFallMeshComponent->PostEditChange();
+
+		
+		RebuildedStaticMeshActor->SetActorLabel(SavedStaticMesh->GetName());
+		RebuildedStaticMeshActor->SetFolderPath(FName(TEXT("WaterFall")));
+		RebuildedStaticMeshActor->InvalidateLightingCache();
+		RebuildedStaticMeshActor->PostEditMove(true);
+		RebuildedStaticMeshActor->PostEditChange();
+		RebuildedStaticMeshActor->MarkPackageDirty();
+		
+		UE_LOG(LogTemp, Error, TEXT("StaticMeshComponent's StaticMesh is: %s"),*WaterFallMeshComponent->GetStaticMesh().GetName());
+	}
+
+	//TODO:最后一定要清空这个Map,如果在这里清空上一次生成的SplineMesh还是追踪不到
+	//CachedSplineAndSplineMeshes.Empty();
+}
+
+UStaticMesh* AWaterFall::SaveAssetToDisk(const UStaticMesh* InStaticMesh, const FString& StaticMeshName, const FString& SaveRelativePath)
+{
+	// 获取AssetTools模块。
+	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools");
+		
+	const FString AssetName = StaticMeshName;
+	const FString AssetPath = SaveRelativePath + StaticMeshName;
+	//AssetToolsModule.Get().CreateUniqueAssetName(*SavePath, *MeshName, AssetPath, AssetName);
+
+	//创建一个新的资产包
+	UPackage* StaticMeshPackage = CreatePackage(*AssetPath);
+		
+	// 加载资源包到内存
+	StaticMeshPackage->FullyLoad();
+
+	// 复制对象到这个新的包
+	UStaticMesh* SavedStaticMesh = DuplicateObject<UStaticMesh>(InStaticMesh, StaticMeshPackage, *AssetName);
+
+	SavedStaticMesh->MarkPackageDirty();
+
+	//通知资产注册模块资产已创建
+	FAssetRegistryModule::AssetCreated(SavedStaticMesh);
+
+	// 保存资产
+	//将相对路径转换为工程的磁盘绝对路径
+	FString FilePath = FPackageName::LongPackageNameToFilename(AssetPath, FPackageName::GetAssetPackageExtension());
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = EObjectFlags::RF_Public | EObjectFlags::RF_Standalone;
+	SaveArgs.Error = GLog;
+	UPackage::SavePackage(StaticMeshPackage, SavedStaticMesh, *FilePath, SaveArgs);
+
+	return SavedStaticMesh;
 }
 
 
@@ -763,7 +878,7 @@ void AWaterFall::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEv
 		}
 		else if (PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, StartWidthRange.XY) || PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, EndWidthRange.XY))
 		{
-			GenerateWaterFallMesh();
+			GenerateSplineMesh();
 		}
 		else if(PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, RestLength))
 		{
