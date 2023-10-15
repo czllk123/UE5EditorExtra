@@ -618,6 +618,8 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 			UStaticMesh* SourceMesh = SplineMesh->GetStaticMesh();//拿到SplineMesh引用的StaticMesh
 			if(!SourceMesh)continue;
 			
+			FVector2f UVOffset = CalculateUVOffsetBasedOnSpline(SplineComponent, SplineMesh, SplineMeshComponents);
+			
 			//遍历每个SplineMesh的每级LOD,提取vertexBuffer
 			for(int32 LODIndex = 0; LODIndex < SourceMesh->GetNumLODs(); LODIndex++)
 			{
@@ -652,6 +654,8 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 					CurrentLODNormals.Add(static_cast<FVector3f>(DeformedNormal));
 					
 					FVector2f OriginalUV = LODResource.VertexBuffers.StaticMeshVertexBuffer.GetVertexUV(i, 0);
+					// 根据UV偏移量调整UV
+					OriginalUV += UVOffset;
 					CurrentLODUVs.Add(OriginalUV);
 				}
 				// 添加三角形并更新索引
@@ -807,20 +811,20 @@ UStaticMesh* AWaterFall::SaveAssetToDisk(const UStaticMesh* InStaticMesh, const 
 	return SavedStaticMesh;
 }
 
-FVector2f AWaterFall::CalculateUVOffsetBasedOnSpline(const USplineComponent* SplineComponent,
-	const USplineMeshComponent* SplineMeshComponent)
+FVector2f AWaterFall::CalculateUVOffsetBasedOnSpline (const USplineComponent* SplineComponent,
+	const USplineMeshComponent* CurrentSplineMeshComponent,
+	const TArray<USplineMeshComponent*>& AllSplineMeshComponents)
 {
 	float TotalSplineLength = SplineComponent->GetSplineLength();
+	
+	// 获取单个SplineMesh对应的spline段的长度
+	float SegmentLength = SplineComponent->GetSegmentLength(0); // 0代表第一段
 
-	// 计算SplineMesh对应的Spline段的开始和结束点
-	float StartKey = SplineMeshComponent->GetStartRoll();
-	float EndKey = SplineMeshComponent->GetEndRoll();
-
-	// 获取Spline段的长度
-	float SplineMeshLength = SplineComponent->GetDistanceAlongSplineAtSplineInputKey(EndKey) - SplineComponent->GetDistanceAlongSplineAtSplineInputKey(StartKey);
-
+	// 使用索引来计算当前SplineMesh在整个spline上的累积距离
+	int32 CurrentIndex = AllSplineMeshComponents.IndexOfByKey(CurrentSplineMeshComponent);
+	float AccumulatedLength = SegmentLength * CurrentIndex;
 	//计算UV偏移
-	float UVOffsetValue = SplineMeshLength / TotalSplineLength;
+	float UVOffsetValue = AccumulatedLength  / TotalSplineLength;
 
 	// 因为我们只在V值上做偏移，所以U值是0
 	return FVector2f(0, UVOffsetValue);

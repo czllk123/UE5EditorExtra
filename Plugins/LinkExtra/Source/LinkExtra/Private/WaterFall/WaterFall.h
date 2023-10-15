@@ -203,10 +203,11 @@ protected:
 
 	//偏移SplineMesh的UV,让UV可以连续，而不是重复，可能还需要旋转90度，来适应shader
 	UFUNCTION(Category= "WaterFall|Spline", DisplayName="计算SplinMesh的UV偏移")
-	FVector2f CalculateUVOffsetBasedOnSpline(const USplineComponent* SplineComponent, const USplineMeshComponent* SplineMeshComponent);
+	FVector2f CalculateUVOffsetBasedOnSpline(const USplineComponent* SplineComponent,
+	const USplineMeshComponent* CurrentSplineMeshComponent,
+	const TArray<USplineMeshComponent*>& AllSplineMeshComponents);
 	
-	//UFUNCTION(Category="Mesh",DisplayName="保存资产到磁盘")
-	//void SaveStaticMeshToDisk(UStaticMesh* InStaticMesh);
+
 
 
 	
