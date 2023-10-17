@@ -33,6 +33,7 @@
 #include "Components/SplineComponent.h"
 
 #include "StaticMeshAttributes.h"
+#include "StaticMeshOperations.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/StaticMeshActor.h"
 
@@ -541,9 +542,12 @@ TArray<FVector> AWaterFall::ResampleSplinePoints(USplineComponent* InSpline, flo
 	return Result;
 }
 
-void AWaterFall::FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals,TArray<FVector2f>& UVs,  const TArray<int32>& Triangles)
+void AWaterFall::FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals, const
+	TArray<FVector2f>& UVs, const TArray<FVector2f>& OffsetUVs, const TArray<int32>& Triangles)
 {
 	FStaticMeshAttributes Attributes(MeshDescription);
+	//Attributes.GetVertexInstanceUVs().SetNumChannels(2);
+	//Attributes.GetVertexInstanceUVs().InsertChannel(1);
 	Attributes.Register();
 
 	MeshDescription.ReserveNewVertices(Positions.Num());
@@ -569,7 +573,9 @@ void AWaterFall::FillMeshDescription(FMeshDescription& MeshDescription, const TA
 
 		FVertexInstanceID VertexInstanceID = MeshDescription.CreateVertexInstance(VertexID);
 		CreatedVertexInstanceIDs.Add(VertexInstanceID);
-		Attributes.GetVertexInstanceUVs().Set(VertexInstanceID, 0, UVs[VertexIndex]);
+
+		Attributes.GetVertexInstanceUVs().Set(VertexInstanceID, 0, OffsetUVs[VertexIndex]);
+		//Attributes.GetVertexInstanceUVs().Set(VertexInstanceID, 1, UVs[VertexIndex]);
 		Attributes.GetVertexInstanceNormals().Set(VertexInstanceID, Normals[VertexIndex]);
 	}
 
@@ -591,7 +597,9 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 	
 	TMap<int32, TArray<FVector3f>> LODCombinedVertices;
 	TMap<int32, TArray<FVector3f>> LODCombinedNormals;
+	TMap<int32, TArray<FVector3f>> LODCombinedTangents;
 	TMap<int32, TArray<FVector2f>> LODCombinedUVs;
+	TMap<int32, TArray<FVector2f>> LODCombinedOffsetUVs;
 	TMap<int32, TArray<int32>> LODCombinedTriangles;
 	TMap<int32, int32> LODVertexCounts; //记录每个LOD的顶点数量
 
@@ -618,11 +626,12 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 			UStaticMesh* SourceMesh = SplineMesh->GetStaticMesh();//拿到SplineMesh引用的StaticMesh
 			if(!SourceMesh)continue;
 			
-			FVector2f UVOffset = CalculateUVOffsetBasedOnSpline(SplineComponent, SplineMesh, SplineMeshComponents);
+			FVector2f UVOffset = CalculateUVOffsetBasedOnSpline(SplineComponent, SplineMesh, SplineMeshComponents, 1);
 			
 			//遍历每个SplineMesh的每级LOD,提取vertexBuffer
 			for(int32 LODIndex = 0; LODIndex < SourceMesh->GetNumLODs(); LODIndex++)
 			{
+
 				const FStaticMeshLODResources& LODResource = SourceMesh->GetLODForExport(LODIndex);
 				
 				int32& CurrentVertexCount = LODVertexCounts.FindOrAdd(LODIndex);
@@ -630,8 +639,9 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 				TArray<FVector3f>& CurrentLODVertices = LODCombinedVertices.FindOrAdd(LODIndex);
 				TArray<FVector3f>& CurrentLODNormals = LODCombinedNormals.FindOrAdd(LODIndex);
 				TArray<FVector2f>& CurrentLODUVs = LODCombinedUVs.FindOrAdd(LODIndex);
+				TArray<FVector2f>& CurrentLODOffsetUVs = LODCombinedOffsetUVs.FindOrAdd(LODIndex);
 				TArray<int32>& CurrentLODTriangles = LODCombinedTriangles.FindOrAdd(LODIndex);
-				
+				int32 WedgeIndex = 0;
 				// 添加顶点和UVs
 				for(uint32 i = 0; i < LODResource.VertexBuffers.PositionVertexBuffer.GetNumVertices(); i++)
 				{
@@ -646,17 +656,21 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 					FVector DeformedPosition = SliceTransform.TransformPosition(static_cast<FVector>(LocalPosition));
 					const FVector WorldPosition = SplineMesh->GetComponentToWorld().TransformPosition(DeformedPosition);
 					CurrentLODVertices.Add(static_cast<FVector3f>(WorldPosition));
+
 					
 					// Apply spline deformation for  vertex Normal
 					FVector3f LocalNormal = LODResource.VertexBuffers.StaticMeshVertexBuffer.VertexTangentZ(i);
-					FVector WorldNormal = SplineMesh->GetComponentToWorld().TransformVectorNoScale(static_cast<FVector>(LocalNormal));
+					FVector WorldNormal = SplineMesh->GetComponentToWorld().TransformVector(static_cast<FVector>(LocalNormal));
 					FVector DeformedNormal = SliceTransform.TransformVector(WorldNormal).GetSafeNormal();
 					CurrentLODNormals.Add(static_cast<FVector3f>(DeformedNormal));
 					
+					
 					FVector2f OriginalUV = LODResource.VertexBuffers.StaticMeshVertexBuffer.GetVertexUV(i, 0);
 					// 根据UV偏移量调整UV
-					OriginalUV += UVOffset;
+					FVector2f OffsetUV = OriginalUV + UVOffset;
+					CurrentLODOffsetUVs.Add(OffsetUV);
 					CurrentLODUVs.Add(OriginalUV);
+
 				}
 				// 添加三角形并更新索引
 				FIndexArrayView Indices = LODResource.IndexBuffer.GetArrayView();
@@ -678,6 +692,7 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 		FillMeshDescription(*MeshDescription, LODCombinedVertices[LODIndex],
 			LODCombinedNormals[LODIndex],
 			LODCombinedUVs[LODIndex],
+			LODCombinedOffsetUVs[LODIndex],
 			LODCombinedTriangles[LODIndex]);
 		AllLODMeshDescriptions.Add(MoveTemp(MeshDescription));
 	}
@@ -686,10 +701,16 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 	UStaticMesh* NewStaticMesh = NewObject<UStaticMesh>(this, FName("WaterFallMesh"), EObjectFlags::RF_Public | EObjectFlags::RF_Standalone);
 	NewStaticMesh->InitResources();
 
+	// make sure it has a new lighting guid
+	NewStaticMesh->SetLightingGuid();
+
+	NewStaticMesh->SetLightMapResolution(64);
+	NewStaticMesh->SetLightMapCoordinateIndex(1);
+	
 	//设置默认材质
 	FStaticMaterial NewMaterialSlot(DefaultMaterial);
 	NewStaticMesh->GetStaticMaterials().Add(NewMaterialSlot);
-	NewStaticMesh->PostEditChange();
+	//NewStaticMesh->PostEditChange();
 	
 	NewStaticMesh->SetRenderData(MakeUnique<FStaticMeshRenderData>());
 	NewStaticMesh->CreateBodySetup();
@@ -706,7 +727,7 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 		ConstMeshDescriptions.Add(Desc.Get());//使用Desc.Get()从TUniquePtr中获取FMeshDescription的原始指针，并将其添加到ConstMeshDescriptions中
 	}
 	NewStaticMesh->BuildFromMeshDescriptions(ConstMeshDescriptions, MeshDescriptionParams);
-	
+	/*
 	//设置各个LOD相关属性,与SplineMesh 保持一致
 	for(int32 LODIndex = 0; LODIndex < NewStaticMesh->GetNumSourceModels(); LODIndex++)
 	{
@@ -714,13 +735,18 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 		if(WaterFallMesh->GetNumSourceModels() > LODIndex)
 		{
 			NewStaticMesh->GetSourceModel(LODIndex).ScreenSize = WaterFallMesh->GetSourceModel(LODIndex).ScreenSize;
-			NewStaticMesh->GetSourceModel(LODIndex).BuildSettings.bRecomputeNormals = true;
+			NewStaticMesh->GetSourceModel(LODIndex).BuildSettings.bRecomputeNormals = false;
 			NewStaticMesh->GetSourceModel(LODIndex).BuildSettings.bUseFullPrecisionUVs = true;
-			NewStaticMesh->GetSourceModel(LODIndex).BuildSettings.bRecomputeTangents = true;
-			NewStaticMesh->GetSourceModel(LODIndex).BuildSettings.bGenerateLightmapUVs = true;
+			NewStaticMesh->GetSourceModel(LODIndex).BuildSettings.bRecomputeTangents = false;
+			
+			NewStaticMesh->GetSourceModel(LODIndex).BuildSettings.bRemoveDegenerates = true;
+			//NewStaticMesh->GetSourceModel(LODIndex).ScreenSize.Default = 0.1f / FMath::Pow(2.0f, NewStaticMesh->GetNumSourceModels() - 1);
+			NewStaticMesh->bAutoComputeLODScreenSize = false;
 		}
 	}
+	NewStaticMesh->GetSourceModel(0).BuildSettings.bGenerateLightmapUVs = true;
 	NewStaticMesh->PostEditChange();
+	*/
 	return  NewStaticMesh;
 }
 
@@ -737,9 +763,11 @@ void AWaterFall::RebuildWaterFallMesh()
 		UE_LOG(LogTemp, Warning, TEXT("Failed to rebuild StaticMesh."));
 		return;
 	}
-
+	
+	
 	//2.保存该StaticMesh为资产
 	UStaticMesh* SavedStaticMesh = SaveAssetToDisk(RebuildStaticMesh, MeshName, SavePath);
+
 
 	// 3. 使用已保存的资产生成或更新场景中的AStaticMeshActor
 	if (!RebuildedStaticMeshActor)
@@ -751,24 +779,24 @@ void AWaterFall::RebuildWaterFallMesh()
 	UStaticMeshComponent* WaterFallMeshComponent = NewObject<UStaticMeshComponent>(RebuildedStaticMeshActor);
 	if(WaterFallMeshComponent)
 	{
-		const FStaticMeshLODResources& LODResource  = RebuildStaticMesh->GetLODForExport(0);
-		//UE_LOG(LogTemp, Error, TEXT("NewStaticMesh Vertex Count: %d"), LODResource.VertexBuffers.PositionVertexBuffer.GetNumVertices());
 		
 		WaterFallMeshComponent->AttachToComponent(RebuildedStaticMeshActor->GetRootComponent(), FAttachmentTransformRules::KeepWorldTransform);
-		
-		WaterFallMeshComponent->SetStaticMesh(SavedStaticMesh);
+		if(SavedStaticMesh)
+		{
+			WaterFallMeshComponent->SetStaticMesh(SavedStaticMesh);
+		}
 		
 		WaterFallMeshComponent->RegisterComponent();
 		
 		WaterFallMeshComponent->PostEditChange();
-
 		
 		RebuildedStaticMeshActor->SetActorLabel(SavedStaticMesh->GetName());
 		RebuildedStaticMeshActor->SetFolderPath(FName(TEXT("WaterFall")));
 		RebuildedStaticMeshActor->InvalidateLightingCache();
+		RebuildedStaticMeshActor->MarkPackageDirty();
 		RebuildedStaticMeshActor->PostEditMove(true);
 		RebuildedStaticMeshActor->PostEditChange();
-		RebuildedStaticMeshActor->MarkPackageDirty();
+
 		
 		UE_LOG(LogTemp, Error, TEXT("StaticMeshComponent's StaticMesh is: %s"),*WaterFallMeshComponent->GetStaticMesh().GetName());
 	}
@@ -813,21 +841,18 @@ UStaticMesh* AWaterFall::SaveAssetToDisk(const UStaticMesh* InStaticMesh, const 
 
 FVector2f AWaterFall::CalculateUVOffsetBasedOnSpline (const USplineComponent* SplineComponent,
 	const USplineMeshComponent* CurrentSplineMeshComponent,
-	const TArray<USplineMeshComponent*>& AllSplineMeshComponents)
+	const TArray<USplineMeshComponent*>& AllSplineMeshComponents, float SegmentLength)
 {
-	float TotalSplineLength = SplineComponent->GetSplineLength();
-	
-	// 获取单个SplineMesh对应的spline段的长度
-	float SegmentLength = SplineComponent->GetSegmentLength(0); // 0代表第一段
-
-	// 使用索引来计算当前SplineMesh在整个spline上的累积距离
+	// 使用索引来计算当前SplineMesh的V值偏移
 	int32 CurrentIndex = AllSplineMeshComponents.IndexOfByKey(CurrentSplineMeshComponent);
-	float AccumulatedLength = SegmentLength * CurrentIndex;
-	//计算UV偏移
-	float UVOffsetValue = AccumulatedLength  / TotalSplineLength;
+	float UVOffsetValue = SegmentLength * CurrentIndex;
 
-	// 因为我们只在V值上做偏移，所以U值是0
 	return FVector2f(0, UVOffsetValue);
+}
+
+void AWaterFall::GenerateMeshDescription(const TArray<USplineComponent*> SplineComponents, int32 LODIndex, FMeshDescription& OutMeshDescription, bool bApplyComponentTransform)
+{
+	
 }
 
 

@@ -123,7 +123,7 @@ public:
 
 	//Spline重采样间距
 	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "10"))
-	float  RestLength = 2;
+	float  RestLength = 2.0f;
 
 	//Spline重采样点数量
 	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "100"))
@@ -193,7 +193,7 @@ protected:
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="SplineMeshToStaticMesh")
 	UStaticMesh* RebuildStaticMeshFromSplineMesh();
 	
-	static void FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals, TArray<FVector2f>& UVs,  const TArray<int32>& Triangles);
+	static void FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals, const TArray<FVector2f>& UVs, const TArray<FVector2f>& OffsetUVs, const TArray<int32>& Triangles);
 	
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="生成新的StaticMesh")
 	void RebuildWaterFallMesh();
@@ -205,8 +205,10 @@ protected:
 	UFUNCTION(Category= "WaterFall|Spline", DisplayName="计算SplinMesh的UV偏移")
 	FVector2f CalculateUVOffsetBasedOnSpline(const USplineComponent* SplineComponent,
 	const USplineMeshComponent* CurrentSplineMeshComponent,
-	const TArray<USplineMeshComponent*>& AllSplineMeshComponents);
-	
+	const TArray<USplineMeshComponent*>& AllSplineMeshComponents, float SegmentLength);
+
+	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="SplineMeshToStaticMesh")
+	static void GenerateMeshDescription(const TArray<USplineComponent*> SplineComponents, int32 LODIndex, FMeshDescription& OutMeshDescription, bool bApplyComponentTransform);
 
 
 
@@ -256,7 +258,9 @@ private:
 
 	// 最近一个段落的结束宽度
 	float LastSegmentEndWidth = 0.0f;
-	
+
+	//SplineMesh段落的长度
+	//float SegmentLength = 0.0f;
 
 	//重建StaticMesh的Actor,用来存储和销毁
 	AStaticMeshActor* RebuildedStaticMeshActor = nullptr;
