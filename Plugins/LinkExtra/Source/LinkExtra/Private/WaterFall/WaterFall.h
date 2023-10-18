@@ -207,8 +207,8 @@ protected:
 	const USplineMeshComponent* CurrentSplineMeshComponent,
 	const TArray<USplineMeshComponent*>& AllSplineMeshComponents, float SegmentLength);
 
-	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="SplineMeshToStaticMesh")
-	static void GenerateMeshDescription(const TArray<USplineComponent*> SplineComponents, int32 LODIndex, FMeshDescription& OutMeshDescription, bool bApplyComponentTransform);
+	//UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="SplineMeshToStaticMesh")
+	//static void GenerateMeshDescription(const TArray<USplineComponent*> SplineComponents, int32 LODIndex, FMeshDescription& OutMeshDescription, bool bApplyComponentTransform);
 
 
 
