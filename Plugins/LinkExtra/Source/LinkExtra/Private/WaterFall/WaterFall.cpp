@@ -591,7 +591,13 @@ void AWaterFall::FillMeshDescription(FMeshDescription& MeshDescription, const TA
 	}
 }
 
-
+//Vertex            vector   顶点
+//VertexID			int      顶点索引
+//VertexInstance    vector  顶点实例(共享顶点)  tips： 如果Mesh是三角面， 一个Vertex有3个VertexInstance
+//VertexInstanceID	int		顶点实例索引
+//IndexOffset		int     顶点数量的偏移值，第一次为0，第二次需要加上第一次填充的顶点数量
+//PolygonGroupID    int     多边形组
+//VertexPositions   集合		MeshDescription中整个模型的“顶点”位置
 UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 {
 
@@ -637,13 +643,21 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 		TVertexInstanceAttributesRef<float> VertexInstanceBinormalSigns = Attributes.GetVertexInstanceBinormalSigns();
 		TVertexInstanceAttributesRef<FVector4f> VertexInstanceColors = Attributes.GetVertexInstanceColors();
 		TVertexInstanceAttributesRef<FVector2f> VertexInstanceUVs = Attributes.GetVertexInstanceUVs();
-
+		VertexInstanceUVs.SetNumChannels(2);
 		
 		//拿到每个LOD的Mesh引用，然后获取每条Spline的MeshDescription
 		const FStaticMeshLODResources& LODResource = SourceMesh->GetLODForExport(LODIndex);
 		
-		// Make sure the mesh is not irreparably malformed.
 	
+		for (int32 MatIndex = 0; MatIndex < SourceMesh->GetStaticMaterials().Num(); ++MatIndex)
+		{
+			const FPolygonGroupID PolygonGroupID = MeshDescription->CreatePolygonGroup();
+			PolygonGroupImportedMaterialSlotNames[PolygonGroupID] = SourceMesh->GetStaticMaterials()[MatIndex].ImportedMaterialSlotName;
+		}
+		
+		const FPolygonGroupID PolygonGroupID = MeshDescription->CreatePolygonGroup();
+
+		
 		//遍历每条Spline获取每条Spline的MeshDescription
 		for(const auto& SplineMeshPair : CachedSplineAndSplineMeshes)
 		{
@@ -656,7 +670,8 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 			{
 				int32 IndexOffset = VertexPositions.GetNumElements();//调整新加入的SplineMesh的正确索引
 				
-				//遍历每个SplineMesh引用的StaticMesh上的顶点，进行变形成SplineMesh的形状
+				
+				//获取splineMesh引用的staticMesh的每一个顶点，将它们变形以匹配spline的形状，然后将变形后的顶点加入到MeshDescription中。
 				for(uint32 VertexIndex = 0; VertexIndex < LODResource.VertexBuffers.PositionVertexBuffer.GetNumVertices(); ++VertexIndex)
 				{
 					FVector3f LocalPosition = LODResource.VertexBuffers.PositionVertexBuffer.VertexPosition(VertexIndex);
@@ -671,32 +686,64 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 
 					
 					FVertexID VertexID = MeshDescription->CreateVertex();
-					VertexPositions[VertexID] = (FVector3f)SliceTransform.TransformPosition((FVector)VertexPositions[VertexID]);
-
-			
+					
+					VertexPositions[VertexID] = (FVector3f)SliceTransform.TransformPosition((FVector)VertexPositions[VertexID + IndexOffset]);
+					
 				}
 
-				FPolygonGroupID PolygonGroupID = MeshDescription->CreatePolygonGroup();
-				//PolygonGroupImportedMaterialSlotNames[PolygonGroupID] = FName(*FString::Printf(TEXT("LOD_%d_PG_%d"), LODIndex, TriangleIndex));
-				//Create all vertex instance
-				int32 TriangleCount = LODResource.GetNumTriangles()/3;
-
-				for (int32 TriangleIndex = 0; TriangleIndex < TriangleCount; ++TriangleIndex)
+				uint32 VertexIndices[3];
+				uint32 TriangleCount = LODResource.GetNumTriangles()/ 3;
+				for (uint32 TriangleIndex = 0; TriangleIndex < TriangleCount; ++TriangleIndex)
 				{
-					// 我们将在这里收集这个三角形的顶点实例
+					const uint32 IndiceIndex0 = TriangleIndex * 3;
+					VertexIndices[0] = LODResource.IndexBuffer.GetIndex(IndiceIndex0);
+					VertexIndices[1] = LODResource.IndexBuffer.GetIndex(IndiceIndex0 + 1);
+					VertexIndices[2] = LODResource.IndexBuffer.GetIndex(IndiceIndex0 + 2);
+
+					// Skip degenerated triangle
+					if (VertexIndices[0] == VertexIndices[1] || VertexIndices[1] == VertexIndices[2] || VertexIndices[0] == VertexIndices[2])
+					{
+						continue;
+					}
 					TArray<FVertexInstanceID> CornerVertexInstanceIDs;
 					CornerVertexInstanceIDs.SetNum(3);
 					FVertexID CornerVertexIDs[3];
 					for (int32 Corner = 0; Corner < 3; ++Corner)
 					{
-						int32 Index = TriangleIndex * 3 + Corner;
-						FVertexInstanceID VertexInstanceID = MeshDescription->CreateVertexInstance(VertexID);
-						TriangleVertexInstances.Add(VertexInstanceID);
-
-						CornerVertexInstanceIDs[Corner] = 
+						uint32 IndiceIndex = IndiceIndex0 + Corner;
+						uint32 VertexIndex = VertexIndices[Corner];
+						const FVertexID VertexID(VertexIndex);
+						const FVertexInstanceID VertexInstanceID = MeshDescription->CreateVertexInstance(VertexID);
+						
+						const float& AxisValue = USplineMeshComponent::GetAxisValueRef(VertexPositions[VertexID], SplineMesh->ForwardAxis);
+						FTransform SliceTransform = SplineMesh->CalcSliceTransform(AxisValue);
+						FVector TangentY = FVector::CrossProduct((FVector)VertexInstanceNormals[VertexInstanceID], (FVector)VertexInstanceTangents[VertexInstanceID]).GetSafeNormal() * VertexInstanceBinormalSigns[VertexInstanceID];
+						VertexInstanceTangents[VertexInstanceID] = (FVector3f)SliceTransform.TransformVector((FVector)VertexInstanceTangents[VertexInstanceID]);
+						TangentY = SliceTransform.TransformVector(TangentY);
+						VertexInstanceNormals[VertexInstanceID] = (FVector3f)SliceTransform.TransformVector((FVector)VertexInstanceNormals[VertexInstanceID]);
+						VertexInstanceBinormalSigns[VertexInstanceID] = GetBasisDeterminantSign((FVector)VertexInstanceTangents[VertexInstanceID], TangentY, (FVector)VertexInstanceNormals[VertexInstanceID]);
+						if (LODResource.VertexBuffers.ColorVertexBuffer.GetNumVertices())
+						{
+							VertexInstanceColors[VertexInstanceID] = FVector4f(LODResource.VertexBuffers.ColorVertexBuffer.VertexColor(IndiceIndex));
+						}
+						else
+						{
+							VertexInstanceColors[VertexInstanceID] = FVector4f(FLinearColor::White);
+						}
+						/*
+						for (uint32 UVIndex = 0; UVIndex < 2; ++UVIndex)
+						{
+							FVector2f UV = LODResource.VertexBuffers.StaticMeshVertexBuffer.GetVertexUV(IndiceIndex, UVIndex);
+							VertexInstanceUVs.Set(VertexInstanceID, UVIndex, UV);
+						}
+						*/
+						CornerVertexInstanceIDs[Corner] = VertexInstanceID;
+						CornerVertexIDs[Corner] = VertexID;
+						
 					}
-
-					FPolygonID NewPolygonID = MeshDescription->CreatePolygon(PolygonGroupID, TriangleVertexInstances);
+					//const FPolygonGroupID PolygonGroupID(LODResource->MaterialIndices[TriangleIndex]);
+					// Insert a polygon into the mesh
+					MeshDescription->CreatePolygon(PolygonGroupID, CornerVertexInstanceIDs);
 				}
 				
 
