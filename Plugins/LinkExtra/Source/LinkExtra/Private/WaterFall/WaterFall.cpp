@@ -669,7 +669,7 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 			for(USplineMeshComponent* SplineMesh : SplineMeshComponents)
 			{
 				int32 IndexOffset = VertexPositions.GetNumElements();//调整新加入的SplineMesh的正确索引
-				
+				int32 CurrentIndexOffset = 0;
 				
 				//获取splineMesh引用的staticMesh的每一个顶点，将它们变形以匹配spline的形状，然后将变形后的顶点加入到MeshDescription中。
 				for(uint32 VertexIndex = 0; VertexIndex < LODResource.VertexBuffers.PositionVertexBuffer.GetNumVertices(); ++VertexIndex)
@@ -687,7 +687,7 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 					
 					FVertexID VertexID = MeshDescription->CreateVertex();
 					
-					VertexPositions[VertexID] = (FVector3f)SliceTransform.TransformPosition((FVector)VertexPositions[VertexID + IndexOffset]);
+					VertexPositions[VertexID] = (FVector3f)SliceTransform.TransformPosition((FVector)VertexPositions[VertexID + CurrentIndexOffset]);
 					
 				}
 
@@ -712,7 +712,7 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 					{
 						uint32 IndiceIndex = IndiceIndex0 + Corner;
 						uint32 VertexIndex = VertexIndices[Corner];
-						const FVertexID VertexID(VertexIndex);
+						const FVertexID VertexID(VertexIndex + CurrentIndexOffset);
 						const FVertexInstanceID VertexInstanceID = MeshDescription->CreateVertexInstance(VertexID);
 						
 						const float& AxisValue = USplineMeshComponent::GetAxisValueRef(VertexPositions[VertexID], SplineMesh->ForwardAxis);
@@ -745,7 +745,7 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 					// Insert a polygon into the mesh
 					MeshDescription->CreatePolygon(PolygonGroupID, CornerVertexInstanceIDs);
 				}
-				
+				CurrentIndexOffset+=IndexOffset;
 
 				/*
 				
