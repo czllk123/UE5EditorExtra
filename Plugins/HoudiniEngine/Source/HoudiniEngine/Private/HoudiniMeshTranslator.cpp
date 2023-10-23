@@ -5534,7 +5534,7 @@ FHoudiniMeshTranslator::CreateStaticMesh_MeshDescription()
 			if (bDoTiming)
 			{
 				HOUDINI_LOG_MESSAGE(TEXT("CreateStaticMesh_MeshDescription() - VertexAttr filled in %f seconds."), FPlatformTime::Seconds() - tick);
-				tick = FPlatformTime::Seconds();
+				tick = FPlatformTime::Seconds(); 
 			}
 
 			//--------------------------------------------------------------------------------------------------------------------- 

@@ -296,8 +296,7 @@ private:
 	TArray<FTriangle> Triangles;
 
 	USplineComponent* TempSpline;
-
-
+	
 	EButtonState GrowthState = EButtonState::Grow;
 
 	int DeadRootsCount = 0;
