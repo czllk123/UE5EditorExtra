@@ -21,6 +21,7 @@
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
 
+#include "SplineProcessor.h"
 
 #include "WaterFall.generated.h"
 
@@ -179,10 +180,10 @@ protected:
 	void DestroyWaterFallMeshActor();
 	
 	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="重采样SplineTransform")
-	TArray<FVector> ResampleSplinePoints(USplineComponent* InSpline, float ResetLength);
+	static TArray<FVector> ResampleSplinePoints( const USplineComponent* InSpline, float ResetLength, float SplineLength);
 
 	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="重采样Spline")
-	TArray<FVector> ResampleSplinePointsWithNumber(USplineComponent* InSpline, int32 SampleNum);
+	static TArray<FVector> ResampleSplinePointsWithNumber(const USplineComponent* InSpline, int32 SampleNum);
 
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="重新生成重采样后的曲线")
 	void ReGenerateSplineAfterResample();
@@ -190,6 +191,10 @@ protected:
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="重新生成重采样后的曲线")
 	void ReGenerateSplineAfterResampleWithNumber();
 
+	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="曲线分簇")
+	void ClusterSplines();
+	
+	
 	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="SplineMeshToStaticMesh")
 	UStaticMesh* RebuildStaticMeshFromSplineMesh();
 	
@@ -248,8 +253,12 @@ private:
 	//存储每条Spline上对应的所有SplineMeshComponent, 重建StaticMesh用
 	TMap<USplineComponent*, TArray<USplineMeshComponent*>> CachedSplineAndSplineMeshes;
 	
-	//存储Spline原始长度，Resample时候用，每次计算样条点的时候都用原始长度算
+	//存储Spline原始长度，Resample时候用，用于Resample后别的函数调用
 	TMap<USplineComponent*, float> CachedSplineOriginalLengths;
+	//复制一份Tmap,存储Spline原始长度，Resample时候用，每次计算样条点的时候都用原始长度算
+	TMap<USplineComponent*, USplineComponent*> BackupSplineData;
+	//用于别的类访问和修改曲线
+	SplineProcessor Processor;
 	
 	// 储存所有发射器的粒子数据
 	TArray<FParticleData> ParticleDataArray;

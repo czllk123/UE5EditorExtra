@@ -269,6 +269,7 @@ void AWaterFall::GenerateSplineMesh()
 	for(auto& SplinePair : CachedSplineOriginalLengths)
 	{
 		USplineComponent* InSpline = SplinePair.Key;
+		
 		TArray<USplineMeshComponent*> SplineMeshes = UpdateSplineMeshComponent(InSpline);
 		//将splineMesh和对应的Spline 存储起来，重建Mesh用
 		CachedSplineAndSplineMeshes.Add(InSpline, SplineMeshes);
@@ -315,6 +316,7 @@ void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePositio
 
 	//储存SplineComponent和长度 Resample用
 	CachedSplineOriginalLengths.Add(WaterFallSpline, WaterFallSpline->GetSplineLength());
+	BackupSplineData.Add(WaterFallSpline, WaterFallSpline);
 }
 
 
@@ -399,6 +401,7 @@ void AWaterFall::ClearAllResource()
 	//清空Spline相关的TMap
 	ParticleIDToSplineComponentMap.Empty();
 	CachedSplineOriginalLengths.Empty();
+	BackupSplineData.Empty();
 	UE_LOG(LogTemp, Warning, TEXT("Cleared all Spline and SplineMesh components"));
 }
 
@@ -433,11 +436,13 @@ void AWaterFall::ReGenerateSplineAfterResample()
 {
 	
 
-	for(auto& SplineLengthPair : CachedSplineOriginalLengths)
+	for(const auto& SplineLengthPair : CachedSplineOriginalLengths)
 	{
 		USplineComponent* InSpline = SplineLengthPair.Key;
+		const float SplineLength = SplineLengthPair.Value;
+		const USplineComponent* BackupSpline = BackupSplineData[InSpline];
 		
-		TArray<FVector> PerSplineLocation = ResampleSplinePoints(InSpline, RestLength);
+		TArray<FVector> PerSplineLocation = ResampleSplinePoints(BackupSpline, RestLength, SplineLength);
 		InSpline->ClearSplinePoints();
 		InSpline->SetSplinePoints(PerSplineLocation, ESplineCoordinateSpace::World,true);
 		InSpline->SetHiddenInGame(true);
@@ -450,11 +455,17 @@ void AWaterFall::ReGenerateSplineAfterResample()
 
 void AWaterFall::ReGenerateSplineAfterResampleWithNumber()
 {
-	for(auto& SplineLengthPair : CachedSplineOriginalLengths)
+	for(const auto& SplineLengthPair : CachedSplineOriginalLengths)
 	{
-		USplineComponent* InSpline = SplineLengthPair.Key;
 		
-		TArray<FVector> PerSplineLocation = ResampleSplinePointsWithNumber(InSpline, SampleNumber);
+		USplineComponent* InSpline = SplineLengthPair.Key;
+		const USplineComponent* BackupSpline = BackupSplineData[InSpline];
+		float Ssegment = InSpline->GetNumberOfSplineSegments();
+
+		UE_LOG(LogTemp, Warning, TEXT("Before Resampling - InSpline Segments: %d, BackupSpline Segments: %d"), InSpline->GetNumberOfSplineSegments(), BackupSpline->GetNumberOfSplineSegments());
+
+		float Bsegemnt = BackupSpline->GetNumberOfSplineSegments();
+		TArray<FVector> PerSplineLocation = ResampleSplinePointsWithNumber(BackupSpline, SampleNumber);
 		InSpline->ClearSplinePoints();
 		InSpline->SetSplinePoints(PerSplineLocation, ESplineCoordinateSpace::World,true);
 		InSpline->SetHiddenInGame(true);
@@ -462,12 +473,23 @@ void AWaterFall::ReGenerateSplineAfterResampleWithNumber()
 		InSpline->AttachToComponent(SceneRoot, FAttachmentTransformRules::KeepRelativeTransform);
 		InSpline->SetVisibility(true, true);
 		PerSplineLocation.Empty();
+		UE_LOG(LogTemp, Warning, TEXT("After Resampling - InSpline Segments: %d , BackupSpline Segments: %d"), InSpline->GetNumberOfSplineSegments(), BackupSpline->GetNumberOfSplineSegments());
+	}
+}
+
+void AWaterFall::ClusterSplines()
+{
+	for(auto& SplineLengthPair : CachedSplineOriginalLengths)
+	{
+		USplineComponent* InSpline = SplineLengthPair.Key;
+		
+		float SplineLength = SplineLengthPair.Value;
+		//Processor.FitterSplines
 	}
 }
 
 
-
-TArray<FVector> AWaterFall::ResampleSplinePointsWithNumber(USplineComponent* InSpline, int32 SampleNum)
+TArray<FVector> AWaterFall::ResampleSplinePointsWithNumber(const USplineComponent* InSpline, int32 SampleNum)
 {
 	
 	TArray<FVector> Result;
@@ -485,6 +507,7 @@ TArray<FVector> AWaterFall::ResampleSplinePointsWithNumber(USplineComponent* InS
 		{
 			float Time = Duration * ((float)Idx / DivNum);
 			FTransform Transform = InSpline->GetTransformAtTime(Time, ESplineCoordinateSpace::World, true, true);
+			UE_LOG(LogTemp, Warning, TEXT("LOcation : %s"), *Transform.GetLocation().ToString());
 			Result.Add(Transform.GetLocation());
 		}
 	}
@@ -492,13 +515,13 @@ TArray<FVector> AWaterFall::ResampleSplinePointsWithNumber(USplineComponent* InS
 }
 
 
-TArray<FVector> AWaterFall::ResampleSplinePoints(USplineComponent* InSpline, float ResetLength)
+TArray<FVector> AWaterFall::ResampleSplinePoints( const USplineComponent* InSpline, float ResetLength, float SplineLength)
 {
 	ResetLength *= 100.0f; // Convert meters to centimeters
 
 	TArray<FVector> Result;
 
-	if (!InSpline || !CachedSplineOriginalLengths.Contains(InSpline) || ResetLength <= SMALL_NUMBER)
+	if (!InSpline || ResetLength <= SMALL_NUMBER)
 	{
 		return Result; 
 	}
@@ -506,10 +529,10 @@ TArray<FVector> AWaterFall::ResampleSplinePoints(USplineComponent* InSpline, flo
 	bool bIsLoop = InSpline->IsClosedLoop();
 	float Duration = InSpline->Duration;
 
-	const float OriginalSplineLength = CachedSplineOriginalLengths[InSpline];
-	UE_LOG(LogTemp, Warning, TEXT("Length : %f "), OriginalSplineLength);
-	int32 Segments = FMath::FloorToInt(OriginalSplineLength / ResetLength);
-	float DiffLength = OriginalSplineLength - ResetLength * Segments; // Remaining length
+
+	UE_LOG(LogTemp, Warning, TEXT("Length : %f "), SplineLength);
+	int32 Segments = FMath::FloorToInt(SplineLength / ResetLength);
+	float DiffLength = SplineLength - ResetLength * Segments; // Remaining length
 
 	
 	// Adjust ResetLength based on remaining length
@@ -619,7 +642,6 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 			if(!SourceMesh)continue;
 			
 			FVector2f UVOffset = CalculateUVOffsetBasedOnSpline(SplineComponent, SplineMesh, SplineMeshComponents, 1);
-			
 			//遍历每个SplineMesh的每级LOD,提取vertexBuffer
 			for(int32 LODIndex = 0; LODIndex < SourceMesh->GetNumLODs(); LODIndex++)
 			{
