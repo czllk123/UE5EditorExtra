@@ -154,9 +154,6 @@ void AWaterFall::StopSimulation()
 			NiagaraComponent->ReregisterComponent();
 		}
 	}
-	UE_LOG(LogTemp, Warning ,TEXT("测试计时器是否结束！"))
-	
-	if(SimulationTimerHandle.IsValid())
 		GetWorld()->GetTimerManager().ClearTimer(SimulationTimerHandle); 
 	
 }
@@ -265,11 +262,19 @@ void AWaterFall::GenerateWaterFallSpline()
 void AWaterFall::GenerateSplineMesh()
 {
 	ClearAllSplineMesh();
-	//暂且在这个地方调用,因为不需要每帧绘制，所以不能像spline那样
+	//暂且在这个地方调用,因为不需要每帧绘制，所以不能Spline那样
+
+	
+	//这里调用分簇算法。先Resample， 再分簇， 分簇完最好返回一个簇的开始和结尾宽度，
 	for(auto& SplinePair : CachedSplineOriginalLengths)
 	{
 		USplineComponent* InSpline = SplinePair.Key;
-		
+
+
+		//这里
+
+
+		//
 		TArray<USplineMeshComponent*> SplineMeshes = UpdateSplineMeshComponent(InSpline);
 		//将splineMesh和对应的Spline 存储起来，重建Mesh用
 		CachedSplineAndSplineMeshes.Add(InSpline, SplineMeshes);
@@ -479,13 +484,11 @@ void AWaterFall::ReGenerateSplineAfterResampleWithNumber()
 
 void AWaterFall::ClusterSplines()
 {
-	for(auto& SplineLengthPair : CachedSplineOriginalLengths)
-	{
-		USplineComponent* InSpline = SplineLengthPair.Key;
-		
-		float SplineLength = SplineLengthPair.Value;
-		//Processor.FitterSplines
-	}
+
+	TArray<USplineComponent*> SplineComponents;
+	CachedSplineOriginalLengths.GetKeys(SplineComponents);
+	Processor.ProcessSplines(SplineComponents);
+
 }
 
 

@@ -258,7 +258,7 @@ private:
 	//复制一份Tmap,存储Spline原始长度，Resample时候用，每次计算样条点的时候都用原始长度算
 	TMap<USplineComponent*, USplineComponent*> BackupSplineData;
 	//用于别的类访问和修改曲线
-	SplineProcessor Processor;
+	FSplineProcessor Processor;
 	
 	// 储存所有发射器的粒子数据
 	TArray<FParticleData> ParticleDataArray;
