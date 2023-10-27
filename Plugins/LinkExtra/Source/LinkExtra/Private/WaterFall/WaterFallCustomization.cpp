@@ -13,14 +13,14 @@
 
 
 #if WITH_EDITORONLY_DATA
-TSharedRef<IDetailCustomization> WaterFallCustomization::MakeInstance()
+TSharedRef<IDetailCustomization> FWaterFallCustomization::MakeInstance()
 {
-	return MakeShareable(new WaterFallCustomization);
+	return MakeShareable(new FWaterFallCustomization);
 }
 
 
 
-void WaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuilder)
+void FWaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuilder)
 {
 	
 	//Edits a category. If it doesn't exist it creates a new one
@@ -61,13 +61,13 @@ void WaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuilde
 			.Content()
 				[
 					SNew(STextBlock)
-					.Text_Raw(this, &WaterFallCustomization::ButtonText)
+					.Text_Raw(this, &FWaterFallCustomization::ButtonText)
 				]
 	];
 
 }
 
-FText WaterFallCustomization::ButtonText() const 
+FText FWaterFallCustomization::ButtonText() const 
 {
 	FString TempCaption;
 	for(const TWeakObjectPtr<UObject>& Object : SelectedObjects)

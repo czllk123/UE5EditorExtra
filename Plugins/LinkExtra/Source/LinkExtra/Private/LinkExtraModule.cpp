@@ -30,7 +30,7 @@ void FLinkExtraModule::RegisterDetails()
 	
 	PropertyModule.RegisterCustomClassLayout(
 		TEXT("WaterFall"),
-		FOnGetDetailCustomizationInstance::CreateStatic(&WaterFallCustomization::MakeInstance));
+		FOnGetDetailCustomizationInstance::CreateStatic(&FWaterFallCustomization::MakeInstance));
 }
 
 void FLinkExtraModule::UnregisterDetails()

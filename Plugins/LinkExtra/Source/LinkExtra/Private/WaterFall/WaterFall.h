@@ -66,7 +66,7 @@ UCLASS(hidecategories=(Tags, AssetUserData, Rendering, Physics,
 class LINKEXTRA_API AWaterFall : public AActor
 {
 	GENERATED_BODY()
-	friend class WaterFallCustomization;
+	friend class FWaterFallCustomization;
 
 
 	typedef TSharedPtr<class FNiagaraDataSetReadback, ESPMode::ThreadSafe> FGpuDataSetPtr;
@@ -93,7 +93,8 @@ public:
 	UPROPERTY(Category="Simulate",BlueprintReadWrite)
 	bool bSimulateValid = true;
 
-
+	UPROPERTY(EditAnywhere, Category = "Spline Clustering")
+	USplineProcessor* SplineProcessorInstance; 
 	
 	//要获取的粒子的信息
 	TArray<FName> ParticlesVariables = {"UniqueID","Position",  "Velocity", "Age"};
@@ -130,6 +131,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "100"))
 	int32 SampleNumber = 10;
 
+	//分簇
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Cluster", DisplayName="分簇参数")
+	FClusterWeight ClusterParameters;
+	
+	
 	//资产名称
 	UPROPERTY(EditAnywhere, Category = "WaterFall|Save",DisplayName="资产名称")
 	FString MeshName = "WaterFallMesh";
@@ -258,7 +264,6 @@ private:
 	//复制一份Tmap,存储Spline原始长度，Resample时候用，每次计算样条点的时候都用原始长度算
 	TMap<USplineComponent*, USplineComponent*> BackupSplineData;
 	//用于别的类访问和修改曲线
-	FSplineProcessor Processor;
 	
 	// 储存所有发射器的粒子数据
 	TArray<FParticleData> ParticleDataArray;

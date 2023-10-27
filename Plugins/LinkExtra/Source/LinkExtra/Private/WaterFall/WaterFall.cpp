@@ -67,6 +67,11 @@ AWaterFall::AWaterFall()
 	
 	BoxCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxCollision"));
 	BoxCollision->SetupAttachment(RootComponent);
+
+	//在构造函数中创建一个实例，那么在AWaterFall对象整个生命周期中都有效，后面多次调用ClusterSpline函数就不会重复创建实例
+	SplineProcessorInstance = CreateDefaultSubobject<USplineProcessor>(TEXT("SplineProcessorInstance"));
+	
+
 }
 
 // Called when the game starts or when spawned
@@ -173,7 +178,7 @@ void AWaterFall::CollectionParticleDataBuffer()
 	}
 	
 	//TArray<FParticleData> ParticleDataArray; //储存所有发射器的粒子数据
-	FCustomNiagaraDataSetAccessor templateFuncs;
+	FCustomNiagaraDataSetAccessor DataSetAccessor;
 	
 	for (const TSharedRef<FNiagaraEmitterInstance, ESPMode::ThreadSafe>& EmitterInstance : StoreSystemInstance->GetEmitters())
 	{
@@ -208,19 +213,19 @@ void AWaterFall::CollectionParticleDataBuffer()
 			{
 				if (ParticleVar == "Position") 
 				{
-					templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Position);
+					DataSetAccessor.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Position);
 				} 
 				else if (ParticleVar == "Velocity") 
 				{
-					templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Velocity);
+					DataSetAccessor.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Velocity);
 				} 
 				else if (ParticleVar == "Age") 
 				{
-					templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Age);
+					DataSetAccessor.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.Age);
 				}
 				else if (ParticleVar == "UniqueID") 
 				{
-					templateFuncs.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.UniqueID);
+					DataSetAccessor.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.UniqueID);
 				}
 			}
 			ParticleDataArray.Add(TempParticleData);
@@ -259,6 +264,23 @@ void AWaterFall::GenerateWaterFallSpline()
 		
 	}
 }
+
+
+
+void AWaterFall::ClusterSplines()
+{
+
+	TArray<USplineComponent*> SplineComponents;
+	CachedSplineOriginalLengths.GetKeys(SplineComponents);
+	
+	USplineProcessor* TempProcessor = NewObject<USplineProcessor>();
+	TempProcessor->WeightData = this->ClusterParameters;
+	TempProcessor->ProcessSplines(SplineComponents);
+	//SplineProcessorInstance->ProcessSplines(SplineComponents);
+
+}
+
+
 void AWaterFall::GenerateSplineMesh()
 {
 	ClearAllSplineMesh();
@@ -482,14 +504,6 @@ void AWaterFall::ReGenerateSplineAfterResampleWithNumber()
 	}
 }
 
-void AWaterFall::ClusterSplines()
-{
-
-	TArray<USplineComponent*> SplineComponents;
-	CachedSplineOriginalLengths.GetKeys(SplineComponents);
-	Processor.ProcessSplines(SplineComponents);
-
-}
 
 
 TArray<FVector> AWaterFall::ResampleSplinePointsWithNumber(const USplineComponent* InSpline, int32 SampleNum)
@@ -913,13 +927,21 @@ void AWaterFall::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEv
 			//ReGenerateSplineAfterResample();
 			ReGenerateSplineAfterResampleWithNumber();
 		}
-		else if (PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, StartWidthRange.XY) || PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, EndWidthRange.XY))
+		else if (PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, StartWidthRange) || PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, EndWidthRange))
 		{
 			GenerateSplineMesh();
 		}
 		else if(PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, RestLength))
 		{
 			ReGenerateSplineAfterResample();
+		}
+		else if(PropertyName == GET_MEMBER_NAME_CHECKED(FClusterWeight, Distance)
+			||PropertyName == GET_MEMBER_NAME_CHECKED(FClusterWeight, SplineLength)
+			||PropertyName == GET_MEMBER_NAME_CHECKED(FClusterWeight, Curvature)
+			||PropertyName == GET_MEMBER_NAME_CHECKED(FClusterWeight, ClusterThreshold))
+			
+		{
+			ClusterSplines();
 		}
 	}
 }

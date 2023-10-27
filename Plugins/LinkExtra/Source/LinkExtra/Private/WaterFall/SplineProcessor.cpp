@@ -1,17 +1,31 @@
 ﻿#include "SplineProcessor.h"
 #include "Components/SplineComponent.h"
-void FSplineProcessor::ProcessSplines(TArray<USplineComponent*>& SplineComponents)
-{
 
-	FClusterWeight WeightData;
+
+USplineProcessor::USplineProcessor()
+{
+}
+
+void USplineProcessor::ProcessSplines(TArray<USplineComponent*>& SplineComponents)
+{
+	float SplineMaxLength = 0.0f;
+	for(USplineComponent* SplineComponent : SplineComponents)
+	{
+		
+		float CurrentSplineLength  = SplineComponent->GetSplineLength();
+		if(CurrentSplineLength > SplineMaxLength)
+		{
+			SplineMaxLength = CurrentSplineLength;
+		}
+	}
 	
-	FitterSplines(SplineComponents, 20.0f);
+	FitterSplines(SplineComponents, SplineMaxLength);
 	TArray<FSplineData> SplineData = FillSplineData(SplineComponents);
-	TArray<FCluster> Cluster = BuildClusters(SplineComponents, SplineData, WeightData, 100); 
+	TArray<FCluster> Cluster = BuildClusters(SplineComponents, SplineData, WeightData); 
 	
 }
 
-void FSplineProcessor::FitterSplines(TArray<USplineComponent*>& InOutSplineComponents, const float SplineMaxLength)
+void USplineProcessor::FitterSplines(TArray<USplineComponent*>& InOutSplineComponents, const float SplineMaxLength)
 {
 	for(int32 i = 0; i < InOutSplineComponents.Num();)
 	{
@@ -33,7 +47,7 @@ void FSplineProcessor::FitterSplines(TArray<USplineComponent*>& InOutSplineCompo
 	}
 }
 
-TArray<FSplineData> FSplineProcessor::FillSplineData(TArray<USplineComponent*>& SplineComponents)
+TArray<FSplineData> USplineProcessor::FillSplineData(TArray<USplineComponent*>& SplineComponents)
 {
 	TArray<FSplineData> SplineDataArray;
 	for(const USplineComponent* SplineComponent: SplineComponents)
@@ -64,7 +78,7 @@ TArray<FSplineData> FSplineProcessor::FillSplineData(TArray<USplineComponent*>& 
 	return SplineDataArray;
 } 
 
-float FSplineProcessor::Distance(const FSplineData& First, const FSplineData& Second, FClusterWeight* Weights)
+float USplineProcessor::Distance(const FSplineData& First, const FSplineData& Second, FClusterWeight* Weights)
 {
 	FClusterWeight Weight;
 	
@@ -74,11 +88,9 @@ float FSplineProcessor::Distance(const FSplineData& First, const FSplineData& Se
 	return  Weight.Distance*Spatial_distance + Weight.SplineLength*LengthDiffence + Weight.Curvature*CurvatureDiffence;
 }
 
-void FSplineProcessor::InsertSpline(QuadTreeNode* Node, USplineComponent* Spline)
-{
-}
 
-TArray<FCluster> FSplineProcessor::BuildClusters(const TArray<USplineComponent*>& InOutSplineComponents, const TArray<FSplineData>& SplineData, FClusterWeight Weights, float Threshold)
+
+TArray<FCluster> USplineProcessor::BuildClusters(const TArray<USplineComponent*>& InOutSplineComponents, const TArray<FSplineData>& SplineData, FClusterWeight Weights)
 {
 	TArray<FCluster> Clusters;
 
@@ -103,7 +115,7 @@ TArray<FCluster> FSplineProcessor::BuildClusters(const TArray<USplineComponent*>
 			float Distance = FVector::Dist(CurrentSpline.StartPosition, RepresentativeSpline.StartPosition) * Weights.Distance;
 
 			// 如果所有权重之和低于阈值，则将其添加到该簇中
-			if (CurvatureDifference + LengthDifference + Distance < Threshold)
+			if (CurvatureDifference + LengthDifference + Distance < Weights.ClusterThreshold)
 			{
 				Cluster.SplineIndices.Add(i);
 				Cluster.Center = (Cluster.Center * (Cluster.SplineIndices.Num() - 1) + CurrentSpline.StartPosition) / Cluster.SplineIndices.Num();  // 更新簇中心
