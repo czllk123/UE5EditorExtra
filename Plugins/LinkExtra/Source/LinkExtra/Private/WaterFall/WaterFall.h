@@ -115,8 +115,8 @@ public:
 	int32 SplineCount = 10;
 
 	//获取粒子buffer的时间间隔
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = " 0.25"), meta = (ClampMax = "2"))
-	float GetDataBufferRate = 0.25f;
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = " 0.1"), meta = (ClampMax = "2"))
+	float GetDataBufferRate = 0.1f;
 	
 	//面片开始宽度
 	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh", BlueprintReadWrite, meta = (ClampMin = " 0"), meta = (ClampMax = "5"))
@@ -250,6 +250,7 @@ private:
 	const FNiagaraDataSet* GetParticleDataSet(class FNiagaraSystemInstance* SystemInstance, class FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter);
 	
 	USplineComponent* WaterFallSpline;
+	
 	FRandomStream RandomStream;
 
 	//粒子ID和SplineComponent映射map
