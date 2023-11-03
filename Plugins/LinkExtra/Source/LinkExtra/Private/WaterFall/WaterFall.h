@@ -20,7 +20,7 @@
 
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
-
+#include "NiagaraDataInterfaceArrayFunctionLibrary.h"
 #include "SplineProcessor.h"
 
 #include "WaterFall.generated.h"
@@ -88,7 +88,10 @@ public:
 	UNiagaraComponent* Niagara;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WaterFall")
-	UBoxComponent* BoxCollision;
+	UBoxComponent* KillBox;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
+	USplineComponent* EmitterSpline;
 
 	UPROPERTY(Category="Simulate",BlueprintReadWrite)
 	bool bSimulateValid = true;
@@ -108,12 +111,12 @@ public:
 	UStaticMesh* WaterFallMesh;
 
 	//生成瀑布面片数量
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = " 1"), meta = (ClampMax = "100"))
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = " 1"), meta = (ClampMax = "200"))
 	int32 SplineCount = 10;
 
 	//获取粒子buffer的时间间隔
 	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = " 0.25"), meta = (ClampMax = "2"))
-	float GetDataBufferRate = 0.5f;
+	float GetDataBufferRate = 0.25f;
 	
 	//面片开始宽度
 	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh", BlueprintReadWrite, meta = (ClampMin = " 0"), meta = (ClampMax = "5"))
@@ -263,7 +266,9 @@ private:
 	TMap<USplineComponent*, float> CachedSplineOriginalLengths;
 	//复制一份Tmap,存储Spline原始长度，Resample时候用，每次计算样条点的时候都用原始长度算
 	TMap<USplineComponent*, USplineComponent*> BackupSplineData;
-	//用于别的类访问和修改曲线
+	
+	//返回一个Cluster包，里面包含cluster后的曲线和首尾宽度
+	TArray<FCluster> ClustersToUse;
 	
 	// 储存所有发射器的粒子数据
 	TArray<FParticleData> ParticleDataArray;

@@ -40,8 +40,8 @@
 #include "PhysicsEngine/BodySetup.h"
 
 #include "UObject/SavePackage.h"
-
-
+#include "Components/BrushComponent.h"
+#include "NiagaraDataInterfaceArrayFunctionLibrary.h"
 
 // Sets default values
 AWaterFall::AWaterFall()
@@ -63,17 +63,27 @@ AWaterFall::AWaterFall()
 	
 	//Niagara->SetNiagaraVariableObject(TEXT("User.ParticleExportObject"),this);
 	Niagara->SetNiagaraVariableInt(TEXT("ParticleSpawnCount"),SplineCount);
-
 	
-	BoxCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxCollision"));
-	BoxCollision->SetupAttachment(RootComponent);
+	
+	KillBox = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxCollision"));
+	KillBox->SetupAttachment(RootComponent);
+	KillBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+
+	KillBox->SetBoxExtent(FVector(32,32,32));
 
 	//在构造函数中创建一个实例，那么在AWaterFall对象整个生命周期中都有效，后面多次调用ClusterSpline函数就不会重复创建实例
 	SplineProcessorInstance = CreateDefaultSubobject<USplineProcessor>(TEXT("SplineProcessorInstance"));
+
+	
+	EmitterSpline = CreateDefaultSubobject<USplineComponent>(TEXT("EmitterSpline"));
+	EmitterSpline->SetupAttachment(RootComponent);
+	EmitterSpline->bShouldVisualizeScale = true;
+	EmitterSpline->ScaleVisualizationWidth = 100.0f;
+	EmitterSpline->EditorUnselectedSplineSegmentColor = FLinearColor::Red;
 	
 
 }
-
 // Called when the game starts or when spawned
 void AWaterFall::BeginPlay()
 {
@@ -100,36 +110,51 @@ void AWaterFall::StartSimulation()
 	for (FSelectionIterator It(*SelectedActors); It; ++It)
 	{
 		AWaterFall* WaterFallActor = Cast<AWaterFall>(*It);
-		for(UActorComponent* AC : WaterFallActor ->GetComponents())
+		if (WaterFallActor == nullptr)
 		{
-			UNiagaraComponent* NiagaraComponent = Cast<UNiagaraComponent>(AC);
-			if(NiagaraComponent== nullptr)
-			{
-				continue;
-			}
+			continue; // 如果当前选中的对象不是 AWaterFall 类型，则跳过
+		}
+
+		UNiagaraComponent* NiagaraComponent = WaterFallActor->FindComponentByClass<UNiagaraComponent>();
+		USplineComponent* SplineComponent = WaterFallActor->FindComponentByClass<USplineComponent>();
+		UBoxComponent* BoxComponent = WaterFallActor->FindComponentByClass<UBoxComponent>();
+		
+		if (NiagaraComponent && SplineComponent && BoxComponent)
+		{
 			NiagaraComponent->bAutoActivate=true;
 			NiagaraComponent->Activate(false);
 			NiagaraComponent->ReregisterComponent();
 
-			//设置Niagara模拟时的相关参数
 			NiagaraComponent->SetNiagaraVariableInt(TEXT("ParticleSpawnCount"),SplineCount);
 			
-			check(IsInGameThread());
-			FNiagaraSystemInstanceControllerPtr SystemInstanceController = NiagaraComponent->GetSystemInstanceController(); 
-			FNiagaraSystemInstance* SystemInstance = SystemInstanceController.IsValid() ? SystemInstanceController->GetSystemInstance_Unsafe() : nullptr;
+			//对EmitterSpline重采样，使用重采样后的位置作为粒子发射源
+			const TArray<FVector> SampleEmitterPoints = ResampleSplinePointsWithNumber(SplineComponent, SplineCount);
+			UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(NiagaraComponent, TEXT("SplinePointsArray"), SampleEmitterPoints);
 
-			check(NiagaraComponent->GetAsset() != nullptr);
-			StoreSystemInstance = SystemInstance;
-			
-			UNiagaraSystem* NiagaraSystem = NiagaraComponent->GetAsset(); 
-			const FVector ComponentLocation = NiagaraComponent->GetComponentLocation();
-			const bool bIsActive = NiagaraComponent->IsActive();
-			if (bIsActive)
-			{
-				UE_LOG(LogTemp,Warning,TEXT("Niagara is Active ！"));
-			} 
-			check(StoreSystemInstance);
+			//获取场景中KillBox的大小和位置传入Niagara
+			FVector KillBoxLocation = BoxComponent->GetComponentLocation();
+			FVector KillBoxBounds = BoxComponent->GetScaledBoxExtent()*2.0f;
+			NiagaraComponent->SetNiagaraVariableVec3(TEXT("BoxPosition"), KillBoxLocation);
+			NiagaraComponent->SetNiagaraVariableVec3(TEXT("BoxSize"), KillBoxBounds);
 		}
+
+			
+		check(IsInGameThread());
+		FNiagaraSystemInstanceControllerPtr SystemInstanceController = NiagaraComponent->GetSystemInstanceController(); 
+		FNiagaraSystemInstance* SystemInstance = SystemInstanceController.IsValid() ? SystemInstanceController->GetSystemInstance_Unsafe() : nullptr;
+
+		check(NiagaraComponent->GetAsset() != nullptr);
+		StoreSystemInstance = SystemInstance;
+		
+		UNiagaraSystem* NiagaraSystem = NiagaraComponent->GetAsset(); 
+		const FVector ComponentLocation = NiagaraComponent->GetComponentLocation();
+		const bool bIsActive = NiagaraComponent->IsActive();
+		if (bIsActive)
+		{
+			UE_LOG(LogTemp,Warning,TEXT("Niagara is Active ！"));
+		} 
+		check(StoreSystemInstance);
+		
 	}
 	
 	GetWorld()->GetTimerManager().SetTimer
@@ -169,6 +194,9 @@ void AWaterFall::CollectionParticleDataBuffer()
 {
 	UE_LOG(LogTemp, Warning ,TEXT(" Start GenerateSplineMesh！"))
 	
+	if(StoreSystemInstance == nullptr)
+		return;
+	
 	auto SystemSimulation = StoreSystemInstance->GetSystemSimulation();
 	const bool bSystemSimulationValid = SystemSimulation.IsValid() && SystemSimulation->IsValid();
 	//等待异步完成再去访问资源，否则触发崩溃
@@ -203,6 +231,10 @@ void AWaterFall::CollectionParticleDataBuffer()
 		
 		if(!DataBuffer || !DataBuffer->GetNumInstances())
 		{
+			UE_LOG(LogTemp,Warning,TEXT("DataBuffer is Not Valid ！"));
+			bSimulateValid = true;
+			SimulateState = EWaterFallButtonState::Simulate;
+			GetWorld()->GetTimerManager().ClearTimer(SimulationTimerHandle); 
 			continue;
 		}
 		UE_LOG(LogTemp,Warning,TEXT("DataBuffer is Valid ！"));
@@ -276,6 +308,7 @@ void AWaterFall::ClusterSplines()
 	USplineProcessor* TempProcessor = NewObject<USplineProcessor>();
 	TempProcessor->WeightData = this->ClusterParameters;
 	TempProcessor->ProcessSplines(SplineComponents);
+	ClustersToUse = TempProcessor->GetClusters();
 	//SplineProcessorInstance->ProcessSplines(SplineComponents);
 
 }
@@ -286,7 +319,14 @@ void AWaterFall::GenerateSplineMesh()
 	ClearAllSplineMesh();
 	//暂且在这个地方调用,因为不需要每帧绘制，所以不能Spline那样
 
-	
+	for (FCluster& Cluster : ClustersToUse)
+	{
+		USplineComponent* InSpline = Cluster.RepresentativeSpline;
+		TArray<USplineMeshComponent*> SplineMeshes = UpdateSplineMeshComponent(InSpline);
+		//将splineMesh和对应的Spline 存储起来，重建Mesh用
+		CachedSplineAndSplineMeshes.Add(InSpline, SplineMeshes);
+	}
+	/*
 	//这里调用分簇算法。先Resample， 再分簇， 分簇完最好返回一个簇的开始和结尾宽度，
 	for(auto& SplinePair : CachedSplineOriginalLengths)
 	{
@@ -301,7 +341,7 @@ void AWaterFall::GenerateSplineMesh()
 		//将splineMesh和对应的Spline 存储起来，重建Mesh用
 		CachedSplineAndSplineMeshes.Add(InSpline, SplineMeshes);
 	}
-
+	*/
 }
 
 
@@ -344,6 +384,7 @@ void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePositio
 	//储存SplineComponent和长度 Resample用
 	CachedSplineOriginalLengths.Add(WaterFallSpline, WaterFallSpline->GetSplineLength());
 	BackupSplineData.Add(WaterFallSpline, WaterFallSpline);
+
 }
 
 
@@ -524,7 +565,7 @@ TArray<FVector> AWaterFall::ResampleSplinePointsWithNumber(const USplineComponen
 		{
 			float Time = Duration * ((float)Idx / DivNum);
 			FTransform Transform = InSpline->GetTransformAtTime(Time, ESplineCoordinateSpace::World, true, true);
-			UE_LOG(LogTemp, Warning, TEXT("LOcation : %s"), *Transform.GetLocation().ToString());
+			//UE_LOG(LogTemp, Warning, TEXT("LOcation : %s"), *Transform.GetLocation().ToString());
 			Result.Add(Transform.GetLocation());
 		}
 	}

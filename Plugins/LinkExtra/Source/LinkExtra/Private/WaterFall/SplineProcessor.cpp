@@ -21,8 +21,8 @@ void USplineProcessor::ProcessSplines(TArray<USplineComponent*>& SplineComponent
 	
 	FitterSplines(SplineComponents, SplineMaxLength);
 	TArray<FSplineData> SplineData = FillSplineData(SplineComponents);
-	TArray<FCluster> Cluster = BuildClusters(SplineComponents, SplineData, WeightData); 
-	
+	Clusters = BuildClusters(SplineComponents, SplineData, WeightData); 
+	UE_LOG(LogTemp,Error,TEXT("num is : %d"), Clusters.Num());
 }
 
 void USplineProcessor::FitterSplines(TArray<USplineComponent*>& InOutSplineComponents, const float SplineMaxLength)
@@ -92,7 +92,7 @@ float USplineProcessor::Distance(const FSplineData& First, const FSplineData& Se
 
 TArray<FCluster> USplineProcessor::BuildClusters(const TArray<USplineComponent*>& InOutSplineComponents, const TArray<FSplineData>& SplineData, FClusterWeight Weights)
 {
-	TArray<FCluster> Clusters;
+	//TArray<FCluster> Clusters;
 
 	if (SplineData.Num() == 0 || InOutSplineComponents.Num() != SplineData.Num())
 	{
@@ -135,15 +135,24 @@ TArray<FCluster> USplineProcessor::BuildClusters(const TArray<USplineComponent*>
 	}
 	
 	// Visualization: Assign a random color to each cluster and update the spline components.
+	// 对于每个簇，找到最中间的一条spline
 	for (FCluster& Cluster : Clusters)
 	{
 		FLinearColor RandomColor = FLinearColor::MakeRandomColor();
+		float MinDistance = FLT_MAX;
 		for (int32 SplineIndex : Cluster.SplineIndices)
 		{
 			USplineComponent* SplineComponent = InOutSplineComponents[SplineIndex];
 			SplineComponent->EditorUnselectedSplineSegmentColor = RandomColor;
 			SplineComponent->UpdateSpline();
 			SplineComponent->PostEditChange();
+
+			float Distance = FVector::Dist(SplineData[SplineIndex].StartPosition, Cluster.Center);
+			if (Distance < MinDistance)
+			{
+				MinDistance = Distance;
+				Cluster.RepresentativeSpline = InOutSplineComponents[SplineIndex]; // 更新代表spline
+			}
 		}
 	}
 	return Clusters;
