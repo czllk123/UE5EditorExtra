@@ -122,7 +122,7 @@ void AWaterFall::StartSimulation()
 		
 		if (NiagaraComponent && SplineComponent && BoxComponent)
 		{
-			//NiagaraComponent->bAutoActivate=true;
+			NiagaraComponent->bAutoActivate=true;
 			NiagaraComponent->Activate(false);
 			NiagaraComponent->ReregisterComponent();
 
@@ -180,7 +180,7 @@ void AWaterFall::StopSimulation()
 			{
 				continue;
 			}
-			//NiagaraComponent->bAutoActivate=false;
+			NiagaraComponent->bAutoActivate=false;
 			NiagaraComponent->Deactivate();
 			NiagaraComponent->ReregisterComponent();
 		}
