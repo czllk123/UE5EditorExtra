@@ -42,6 +42,11 @@
 #include "UObject/SavePackage.h"
 #include "Components/BrushComponent.h"
 #include "NiagaraDataInterfaceArrayFunctionLibrary.h"
+#include "StaticMeshOperations.h"
+#include "Async/ParallelFor.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Kismet/KismetMathLibrary.h"
+#include "Kismet/KismetSystemLibrary.h"
 
 // Sets default values
 AWaterFall::AWaterFall()
@@ -64,13 +69,16 @@ AWaterFall::AWaterFall()
 	
 	//Niagara->SetNiagaraVariableObject(TEXT("User.ParticleExportObject"),this);
 	Niagara->SetNiagaraVariableInt(TEXT("ParticleSpawnCount"),SplineCount);
+
+
+	InstancedStaticMeshComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("InstancedStaticMesh"));
+	InstancedStaticMeshComponent->SetupAttachment(RootComponent);
+	InstancedStaticMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	
 	
 	KillBox = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxCollision"));
 	KillBox->SetupAttachment(RootComponent);
 	KillBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-
 	KillBox->SetBoxExtent(FVector(32,32,32));
 
 	//在构造函数中创建一个实例，那么在AWaterFall对象整个生命周期中都有效，后面多次调用ClusterSpline函数就不会重复创建实例
@@ -82,7 +90,23 @@ AWaterFall::AWaterFall()
 	EmitterSpline->bShouldVisualizeScale = true;
 	EmitterSpline->ScaleVisualizationWidth = 100.0f;
 	EmitterSpline->EditorUnselectedSplineSegmentColor = FLinearColor::Red;
-	
+
+	/*
+	//将Spline变成SplineMesh
+	int32 NumSplineSegments = EmitterSpline->GetNumberOfSplineSegments();
+	for(int32 i = 0; i < NumSplineSegments; ++i)
+	{
+		FVector StartPos, StartTangent, EndPos, EndTangent;
+		EmitterSpline->GetLocationAndTangentAtSplinePoint(i, StartPos, StartTangent, ESplineCoordinateSpace::Local);
+		EmitterSpline->GetLocationAndTangentAtSplinePoint(i + 1, EndPos, EndTangent, ESplineCoordinateSpace::Local);
+		USplineMeshComponent* SplineMesh = NewObject<USplineMeshComponent>(this, USplineMeshComponent::StaticClass());
+		SplineMesh->SetStaticMesh(Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(),nullptr,TEXT("/Engine/EditorLandscapeResources/SplineEditorMesh"))));
+		SplineMesh->SetMobility(EComponentMobility::Movable);
+		SplineMesh->AttachToComponent(EmitterSpline, FAttachmentTransformRules::KeepRelativeTransform);  // 将Spline Mesh附加到Spline上
+		SplineMesh->RegisterComponent();
+		SplineMesh->SetVisibility(true, true);
+	}
+	*/
 
 }
 // Called when the game starts or when spawned
@@ -91,6 +115,101 @@ void AWaterFall::BeginPlay()
 	Super::BeginPlay();
 	
 }
+
+TArray<FVector> AWaterFall::SourceEmitterPositions(USplineComponent* EmitterSplineComponent, int32 EmitterPointsCount, bool bSnapToGrid)
+{
+	TArray<bool> EliminationMaskForHit;
+	EliminationMaskForHit.Init(false, EmitterPointsCount);
+	this->EmitterPoints.Empty();
+	this->EmitterPoints.Init(FEmitterPoints(), EmitterPointsCount);
+
+	const float SplineLength = EmitterSplineComponent->GetSplineLength();
+
+	ParallelFor(EmitterPointsCount, [this, &EmitterSplineComponent, &SplineLength, &EliminationMaskForHit](int32 i)
+	{
+		const uint32 InitialSeed = GenHash(Seed, i, 456);
+		
+		const FRandomStream Rs(InitialSeed);
+		const float SplineDist = UKismetMathLibrary::RandomFloatInRangeFromStream( Rs, 0, SplineLength);
+
+		const FVector Location = EmitterSplineComponent->GetWorldLocationAtDistanceAlongSpline(SplineDist);
+		const FVector RightVector = EmitterSplineComponent->GetRightVectorAtDistanceAlongSpline(SplineDist, ESplineCoordinateSpace::World);
+		const FVector ScaleAlongSpline = EmitterSplineComponent->GetScaleAtDistanceAlongSpline(SplineDist);
+		const float Range = ScaleAlongSpline.Y * 500;
+		float RandHori = 0;
+		RandHori = UKismetMathLibrary::RandomFloatInRangeFromStream(-Range, Range, Rs);
+
+		FVector RayStart = Location + RightVector * RandHori;
+
+		const float DisturbX = UKismetMathLibrary::RandomFloatInRangeFromStream(-Disturb, Disturb, Rs);
+		const float DisturbY = UKismetMathLibrary::RandomFloatInRangeFromStream(-Disturb, Disturb, Rs);
+
+		RayStart.X += DisturbX;
+		RayStart.Y += DisturbY;
+
+		const FVector RayEnd = RayStart + FVector(0, 0, -100000000);
+
+		// Do Line Trace
+		FHitResult OutHit;
+		bool bHit = UKismetSystemLibrary::LineTraceSingle(this, RayStart, RayEnd, UEngineTypes::ConvertToTraceType(ECC_Visibility), true, {}, EDrawDebugTrace::None, OutHit, true, FLinearColor::Red, FLinearColor::Green, 5.0f);
+		bHit = bHit && OutHit.bBlockingHit && !OutHit.bStartPenetrating;
+
+		if (!bHit)
+		{
+			EliminationMaskForHit[i] = true;
+		}
+		/*
+		else
+		{
+			if (bUseSlopeDel)
+			{
+				const float Angle = UKismetMathLibrary::DegAcos(OutHit.ImpactNormal.Z);
+				if (Angle < SlopeRange.X && Angle > SlopeRange.Y)
+				{
+					EliminationMaskForHit[i] = true;
+				}
+			}
+	
+			if (bSpawnOnLandscapeOnly)
+			{
+				// if (OutHit.Component->GetClass() != ULandscapeHeightfieldCollisionComponent::StaticClass() && OutHit.Component->GetClass() != ULandscapeMeshCollisionComponent::StaticClass())
+				const UClass* HitClass = OutHit.Component->GetClass();
+				if (HitClass != ULandscapeHeightfieldCollisionComponent::StaticClass())
+				{
+					EliminationMaskForHit[i] = true;
+				}
+			}
+
+		}
+		*/
+		if (!EliminationMaskForHit[i])
+		{
+			this->EmitterPoints[i].Position = OutHit.ImpactPoint;
+
+			this->EmitterPoints[i].Normal = OutHit.ImpactNormal;
+
+		}
+	});
+
+	// Eliminate Points based on hit or not
+	TArray<FVector> ResultPositions;
+	for (int32 i = EmitterPointsCount - 1; i >= 0; i--)
+	{
+		if (EliminationMaskForHit[i])
+		{
+			this->EmitterPoints.RemoveAtSwap(i);
+			
+		}
+		else
+		{
+			ResultPositions.Add(this->EmitterPoints[i].Position);
+		}
+	}
+
+	//EliminateClosePts();
+	return ResultPositions;
+}
+
 
 
 void AWaterFall::StartSimulation()
@@ -122,14 +241,30 @@ void AWaterFall::StartSimulation()
 		
 		if (NiagaraComponent && SplineComponent && BoxComponent)
 		{
-			NiagaraComponent->bAutoActivate=true;
+			//NiagaraComponent->bAutoActivate=false;
 			NiagaraComponent->Activate(false);
-			NiagaraComponent->ReregisterComponent();
+			//NiagaraComponent->ReregisterComponent();
 
+			NiagaraComponent->SetNiagaraVariableFloat(TEXT("ParticleLifeTime"), ParticleLife);
 			NiagaraComponent->SetNiagaraVariableInt(TEXT("ParticleSpawnCount"),SplineCount);
 			
+			
 			//对EmitterSpline重采样，使用重采样后的位置作为粒子发射源
-			const TArray<FVector> SampleEmitterPoints = ResampleSplinePointsWithNumber(SplineComponent, SplineCount);
+			//const TArray<FVector> SampleEmitterPoints = ResampleSplinePointsWithNumber(SplineComponent, SplineCount);
+
+			InstancedStaticMeshComponent->ClearInstances();
+			const TArray<FVector> SampleEmitterPoints = SourceEmitterPositions(SplineComponent, SplineCount, true);
+			TArray<FTransform> Transforms;
+			for (const FVector& Position : SampleEmitterPoints)
+			{
+				FTransform Transform;
+				Transform.SetLocation(Position);
+				Transform.SetScale3D(FVector(0.2,0.2,0.2));
+				Transforms.Add(Transform);
+			}
+			InstancedStaticMeshComponent->AddInstances(Transforms, false, true);
+
+			
 			UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(NiagaraComponent, TEXT("SplinePointsArray"), SampleEmitterPoints);
 
 			//获取场景中KillBox的大小和位置传入Niagara
@@ -137,6 +272,8 @@ void AWaterFall::StartSimulation()
 			FVector KillBoxBounds = BoxComponent->GetScaledBoxExtent()*2.0f;
 			NiagaraComponent->SetNiagaraVariableVec3(TEXT("BoxPosition"), KillBoxLocation);
 			NiagaraComponent->SetNiagaraVariableVec3(TEXT("BoxSize"), KillBoxBounds);
+
+			
 		}
 
 			
@@ -180,9 +317,9 @@ void AWaterFall::StopSimulation()
 			{
 				continue;
 			}
-			NiagaraComponent->bAutoActivate=false;
+			//NiagaraComponent->bAutoActivate=false;
 			NiagaraComponent->Deactivate();
-			NiagaraComponent->ReregisterComponent();
+			//NiagaraComponent->ReregisterComponent();
 		}
 	}
 		GetWorld()->GetTimerManager().ClearTimer(SimulationTimerHandle); 
@@ -758,10 +895,9 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 	{
 		auto LODIndex = PerLODPair.Key;
 		TUniquePtr<FMeshDescription> MeshDescription = MakeUnique<FMeshDescription>();
-		FillMeshDescription(*MeshDescription, LODCombinedVertices[LODIndex],
-			LODCombinedNormals[LODIndex],
-			LODCombinedUVs[LODIndex],
-			LODCombinedTriangles[LODIndex]);
+		FillMeshDescription(*MeshDescription, LODCombinedVertices[LODIndex],LODCombinedNormals[LODIndex],LODCombinedUVs[LODIndex],LODCombinedTriangles[LODIndex]);
+		FStaticMeshOperations::ComputeTriangleTangentsAndNormals(*MeshDescription, 0.0f);
+		FStaticMeshOperations::RecomputeNormalsAndTangentsIfNeeded(*MeshDescription, EComputeNTBsFlags::BlendOverlappingNormals);
 		AllLODMeshDescriptions.Add(MoveTemp(MeshDescription));
 	}
 	
@@ -786,10 +922,12 @@ UStaticMesh* AWaterFall::RebuildStaticMeshFromSplineMesh()
 	TArray<const FMeshDescription*> ConstMeshDescriptions;
 	for(const TUniquePtr<FMeshDescription>& Desc : AllLODMeshDescriptions)
 	{
+
 		ConstMeshDescriptions.Add(Desc.Get());//使用Desc.Get()从TUniquePtr中获取FMeshDescription的原始指针，并将其添加到ConstMeshDescriptions中
+		
 	}
 	NewStaticMesh->BuildFromMeshDescriptions(ConstMeshDescriptions, MeshDescriptionParams);
-	
+
 	//设置各个LOD相关属性,与SplineMesh 保持一致
 	for(int32 LODIndex = 0; LODIndex < NewStaticMesh->GetNumSourceModels(); LODIndex++)
 	{
@@ -966,6 +1104,8 @@ void AWaterFall::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEv
 	if(PropertyChangedEvent.Property != nullptr)
 	{
 		const FName PropertyName = PropertyChangedEvent.Property->GetFName();
+		
+		
 		if(PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, SampleNumber))
 		{
 			//ReGenerateSplineAfterResample();

@@ -26,6 +26,54 @@
 #include "WaterFall.generated.h"
 
 
+FORCEINLINE uint32 hash_bit_rotate(uint32 x, uint32 k)
+{
+	return (x << k) | (x >> (32 - k));
+}
+
+FORCEINLINE void hash_bit_final(uint32 &a, uint32 &b, uint32 &c)
+{
+	c ^= b;
+	c -= hash_bit_rotate(b, 14);
+	a ^= c;
+	a -= hash_bit_rotate(c, 11);
+	b ^= a;
+	b -= hash_bit_rotate(a, 25);
+	c ^= b;
+	c -= hash_bit_rotate(b, 16);
+	a ^= c;
+	a -= hash_bit_rotate(c, 4);
+	b ^= a;
+	b -= hash_bit_rotate(a, 14);
+	c ^= b;
+	c -= hash_bit_rotate(b, 24);
+}
+
+FORCEINLINE uint32 GenHash(uint32 kx, uint32 ky)
+{
+	uint32 a, b, c;
+	a = b = c = 0xdeadbeef + (2 << 2) + 13;
+
+	b += ky;
+	a += kx;
+	hash_bit_final(a, b, c);
+
+	return c;
+}
+
+FORCEINLINE uint32 GenHash(uint32 kx, uint32 ky, uint32 kz)
+{
+	uint32 a, b, c;
+	a = b = c = 0xdeadbeef + (3 << 2) + 13;
+
+	c += kz;
+	b += ky;
+	a += kx;
+	hash_bit_final(a, b, c);
+
+	return c;
+}
+
 UENUM()
 enum EWaterFallButtonState
 {
@@ -57,7 +105,21 @@ struct FParticleData
 	}
 };
 
+USTRUCT(BlueprintType)
+struct FEmitterPoints
+{
+	GENERATED_BODY()
+	UPROPERTY(BlueprintReadWrite)
+	FVector Position;
 
+	UPROPERTY(BlueprintReadWrite)
+	FVector Normal;
+	
+	FEmitterPoints()
+		: Position(FVector::ZeroVector), Normal(FVector::ZeroVector)
+	{}
+	
+};
 
 
 
@@ -86,6 +148,9 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
 	UNiagaraComponent* Niagara;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
+	UInstancedStaticMeshComponent* InstancedStaticMeshComponent;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WaterFall")
 	UBoxComponent* KillBox;
@@ -106,14 +171,34 @@ public:
 	
 	EWaterFallButtonState GetSimulateStateValue(){ return SimulateState;}
 
-	//瀑布SplineMesh引用的StaticMesh
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh", DisplayName="输入生成瀑布的静态网格")
-	UStaticMesh* WaterFallMesh;
 
-	//生成瀑布面片数量
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = " 1"), meta = (ClampMax = "200"))
+
+	/////////////////////////////////////////////DetailParameters//////////////////////////////////////
+
+	UPROPERTY(EditAnywhere, Category = "WaterFall|EmitterSource", DisplayName="是否贴地")
+	bool bSnapToGround = false;
+
+	UPROPERTY(EditAnywhere, Category = "WaterFall|EmitterSource", DisplayName="随机数")
+	int32 Seed = 666;
+
+	UPROPERTY(EditAnywhere, Category= "WaterFall|EmitterSource", DisplayName="坡度剔除")
+	FVector2D SlopeRange = {0, 90};
+	
+	UPROPERTY(EditAnywhere, Category = "WaterFall|EmitterSource", DisplayName="粒子模拟数量", BlueprintReadWrite, meta = (ClampMin = " 1"), meta = (ClampMax = "200"))
 	int32 SplineCount = 10;
+	
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Simulation", DisplayName="初始位置偏移")
+	float Disturb = 0.0f;
+	
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Simulation", DisplayName="粒子生命周期")
+	float ParticleLife = 7.0f;
+	
 
+
+	//瀑布SplineMesh引用的StaticMesh
+	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh", DisplayName="输入生成瀑布的静态网格", meta = (ClampMin = " 1"), meta = (ClampMax = "20"))
+	UStaticMesh* WaterFallMesh;
+	
 	//获取粒子buffer的时间间隔
 	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = " 0.1"), meta = (ClampMax = "2"))
 	float GetDataBufferRate = 0.1f;
@@ -151,7 +236,9 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
-	
+
+	UFUNCTION(BlueprintCallable,Category="WaterFall|Emitter", DisplayName="Spline发射源")
+	TArray<FVector> SourceEmitterPositions(USplineComponent* EmitterSplineComponent, int32 EmitterPointsCount, bool bSnapToGrid = false);
 	
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Spline", DisplayName="开始模拟")
 	void StartSimulation();
@@ -236,7 +323,9 @@ private:
 #if WITH_EDITOR
 	FOnSplineDataChanged SplineDataChangedEvent;
 #endif
-
+	
+	//用Spline撒的点作为发射源
+	TArray<FEmitterPoints> EmitterPoints;
 	
 	/** Index of this instance in the system simulation. */
 	int32 SystemInstanceIndex;
