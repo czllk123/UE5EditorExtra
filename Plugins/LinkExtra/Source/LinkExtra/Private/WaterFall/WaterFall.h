@@ -21,8 +21,9 @@
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
 #include "NiagaraDataInterfaceArrayFunctionLibrary.h"
+#include "NiagaraDataInterfaceExport.h"
 #include "SplineProcessor.h"
-
+#include "NiagaraEvents.h"
 #include "WaterFall.generated.h"
 
 
@@ -106,21 +107,35 @@ struct FParticleData
 };
 
 USTRUCT(BlueprintType)
+struct FEmitterAttributes
+{
+	GENERATED_BODY()
+	TArray<FVector> Locations;
+	TArray<FVector> Velocities;
+	
+	const TArray<FVector>& GetLocations() const { return Locations; }
+	const TArray<FVector>& GetVelocities() const { return Velocities; }
+};
+
+
+USTRUCT(BlueprintType)
 struct FEmitterPoints
 {
 	GENERATED_BODY()
 	UPROPERTY(BlueprintReadWrite)
-	FVector Position;
+	FVector Location;
 
 	UPROPERTY(BlueprintReadWrite)
 	FVector Normal;
+
+	UPROPERTY(BlueprintReadWrite)
+	FVector Velocity;
 	
 	FEmitterPoints()
-		: Position(FVector::ZeroVector), Normal(FVector::ZeroVector)
+		: Location(FVector::ZeroVector), Normal(FVector::ZeroVector), Velocity(FVector::ZeroVector)
 	{}
 	
 };
-
 
 
 UCLASS(hidecategories=(Tags, AssetUserData, Rendering, Physics,
@@ -157,6 +172,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
 	USplineComponent* EmitterSpline;
+	const USplineComponent* GetEmitterSpline() const  {return EmitterSpline;}
 
 	UPROPERTY(Category="Simulate",BlueprintReadWrite)
 	bool bSimulateValid = true;
@@ -238,7 +254,11 @@ protected:
 	virtual void BeginPlay() override;
 
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Emitter", DisplayName="Spline发射源")
-	TArray<FVector> SourceEmitterPositions(USplineComponent* EmitterSplineComponent, int32 EmitterPointsCount, bool bSnapToGrid = false);
+	void ComputeEmitterPoints(USplineComponent* EmitterSplineComponent, int32 EmitterPointsCount, bool bSnapToGrid = false);
+
+	UFUNCTION(BlueprintCallable,Category="WaterFall|Emitter", DisplayName="Spline发射源")
+	void UpdateEmitterPoints();
+
 	
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Spline", DisplayName="开始模拟")
 	void StartSimulation();
@@ -253,6 +273,14 @@ protected:
 	
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="收集粒子Buffer")
 	void CollectionParticleDataBuffer();
+
+	// 声明绑定Niagara事件的函数
+	void BindNiagaraEvents(UNiagaraComponent* NiagaraComponent);
+
+	// 声明处理Niagara碰撞事件的函数
+	UFUNCTION()
+	void OnCollisionEvent(const FNiagaraCollisionEventPayload& CollisionEventPayload);
+	
 
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Spline", DisplayName="生成瀑布面片")
 	void GenerateWaterFallSpline();
@@ -309,14 +337,16 @@ protected:
 	const TArray<USplineMeshComponent*>& AllSplineMeshComponents, float SegmentLength);
 	
 
-
+	//virtual void PerformAction(FNiagaraEmitterInstance& OwningSim, const FNiagaraEventReceiverProperties& OwningEventReceiver) override;
 
 	
 #if WITH_EDITOR
 	DECLARE_EVENT(AWaterFall, FOnSplineDataChanged);
 	virtual void PostEditUndo() override;
+	
 	//监视特定参数被更改后调用调用相应的函数更新结果
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+	virtual void OnConstruction(const FTransform& Transform) override;
 #endif
 	
 private:
@@ -326,6 +356,12 @@ private:
 	
 	//用Spline撒的点作为发射源
 	TArray<FEmitterPoints> EmitterPoints;
+
+	//用Spline撒的点作为发射源
+	FEmitterAttributes SourceEmitterAttributes;
+
+	//在场景中被选择的Spline粒子发射器
+	USplineComponent* SelectedSplineComponent = nullptr;
 	
 	/** Index of this instance in the system simulation. */
 	int32 SystemInstanceIndex;

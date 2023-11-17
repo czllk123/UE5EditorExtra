@@ -3,6 +3,8 @@
 
 #include "WaterFall.h"
 
+#include <Windows.Data.Text.h>
+
 #include "AssetToolsModule.h"
 #include "Editor.h"
 
@@ -116,21 +118,29 @@ void AWaterFall::BeginPlay()
 	
 }
 
-TArray<FVector> AWaterFall::SourceEmitterPositions(USplineComponent* EmitterSplineComponent, int32 EmitterPointsCount, bool bSnapToGrid)
+void AWaterFall::ComputeEmitterPoints(USplineComponent* EmitterSplineComponent, int32 EmitterPointsCount, bool bSnapToGrid)
 {
+	InstancedStaticMeshComponent->ClearInstances();
+
 	TArray<bool> EliminationMaskForHit;
 	EliminationMaskForHit.Init(false, EmitterPointsCount);
+
+	this->SourceEmitterAttributes.Locations.Init(FVector::ZeroVector, EmitterPointsCount);
+	this->SourceEmitterAttributes.Velocities.Init(FVector::ZeroVector, EmitterPointsCount);
+	
 	this->EmitterPoints.Empty();
 	this->EmitterPoints.Init(FEmitterPoints(), EmitterPointsCount);
 
 	const float SplineLength = EmitterSplineComponent->GetSplineLength();
-
-	ParallelFor(EmitterPointsCount, [this, &EmitterSplineComponent, &SplineLength, &EliminationMaskForHit](int32 i)
+	const float PointSpacing = SplineLength / (EmitterPointsCount - 1);
+	
+	ParallelFor(EmitterPointsCount, [this, &EmitterSplineComponent, &SplineLength, &PointSpacing, &EliminationMaskForHit](int32 i)
 	{
 		const uint32 InitialSeed = GenHash(Seed, i, 456);
 		
 		const FRandomStream Rs(InitialSeed);
-		const float SplineDist = UKismetMathLibrary::RandomFloatInRangeFromStream( Rs, 0, SplineLength);
+		//const float SplineDist = UKismetMathLibrary::RandomFloatInRangeFromStream( Rs, 0, SplineLength);
+		const float SplineDist = PointSpacing * i;
 
 		const FVector Location = EmitterSplineComponent->GetWorldLocationAtDistanceAlongSpline(SplineDist);
 		const FVector RightVector = EmitterSplineComponent->GetRightVectorAtDistanceAlongSpline(SplineDist, ESplineCoordinateSpace::World);
@@ -184,37 +194,58 @@ TArray<FVector> AWaterFall::SourceEmitterPositions(USplineComponent* EmitterSpli
 		*/
 		if (!EliminationMaskForHit[i])
 		{
-			this->EmitterPoints[i].Position = OutHit.ImpactPoint;
-
+			this->SourceEmitterAttributes.Locations[i] = OutHit.ImpactPoint;
+			
+			this->EmitterPoints[i].Location = OutHit.ImpactPoint;
+			//this->EmitterPoints[i].Transform.SetScale3D(FVector(0.2,0.2,0.2));
+			
 			this->EmitterPoints[i].Normal = OutHit.ImpactNormal;
-
+			//InstancedStaticMeshComponent->AddInstance(this->EmitterPoints[i].Transform,  true);
 		}
 	});
 
 	// Eliminate Points based on hit or not
-	TArray<FVector> ResultPositions;
+
 	for (int32 i = EmitterPointsCount - 1; i >= 0; i--)
 	{
 		if (EliminationMaskForHit[i])
 		{
 			this->EmitterPoints.RemoveAtSwap(i);
-			
+			this->SourceEmitterAttributes.Locations.RemoveAtSwap(i);
 		}
-		else
-		{
-			ResultPositions.Add(this->EmitterPoints[i].Position);
-		}
+
 	}
 
 	//EliminateClosePts();
-	return ResultPositions;
+	TArray<FTransform> ValidTransforms;
+	for (const FEmitterPoints& EmitterPoint : this->EmitterPoints)
+	{
+		FTransform Transform(EmitterPoint.Location);
+		Transform.SetScale3D(FVector(0.2f,0.2f,0.2f));
+		
+		ValidTransforms.Add(Transform);
+	}
+
+	InstancedStaticMeshComponent->AddInstances(ValidTransforms, false, true);
+
 }
 
+void AWaterFall::UpdateEmitterPoints()
+{
+	
+	if (EmitterSpline)
+	{
+		//对EmitterSpline重采样，使用重采样后的位置作为粒子发射源
+		//const TArray<FVector> SampleEmitterPoints = ResampleSplinePointsWithNumber(SplineComponent, SplineCount);
+		ComputeEmitterPoints(EmitterSpline, SplineCount, true);
+	}
+	
+}
 
 
 void AWaterFall::StartSimulation()
 {
-	
+	TRACE_CPUPROFILER_EVENT_SCOPE(AAAAAAA)
 	UE_LOG(LogTemp,Warning,TEXT("测试计时器是否开始！"));
 	//const FString EmitterName = "Fountain002";
 	bSimulateValid = false;
@@ -237,7 +268,7 @@ void AWaterFall::StartSimulation()
 
 		UNiagaraComponent* NiagaraComponent = WaterFallActor->FindComponentByClass<UNiagaraComponent>();
 		USplineComponent* SplineComponent = WaterFallActor->FindComponentByClass<USplineComponent>();
-		UBoxComponent* BoxComponent = WaterFallActor->FindComponentByClass<UBoxComponent>();
+		UBoxComponent* BoxComponent = WaterFallActor->FindComponentByClass<UBoxComponent>(); 
 		
 		if (NiagaraComponent && SplineComponent && BoxComponent)
 		{
@@ -247,33 +278,17 @@ void AWaterFall::StartSimulation()
 
 			NiagaraComponent->SetNiagaraVariableFloat(TEXT("ParticleLifeTime"), ParticleLife);
 			NiagaraComponent->SetNiagaraVariableInt(TEXT("ParticleSpawnCount"),SplineCount);
-			
-			
-			//对EmitterSpline重采样，使用重采样后的位置作为粒子发射源
-			//const TArray<FVector> SampleEmitterPoints = ResampleSplinePointsWithNumber(SplineComponent, SplineCount);
 
-			InstancedStaticMeshComponent->ClearInstances();
-			const TArray<FVector> SampleEmitterPoints = SourceEmitterPositions(SplineComponent, SplineCount, true);
-			TArray<FTransform> Transforms;
-			for (const FVector& Position : SampleEmitterPoints)
-			{
-				FTransform Transform;
-				Transform.SetLocation(Position);
-				Transform.SetScale3D(FVector(0.2,0.2,0.2));
-				Transforms.Add(Transform);
-			}
-			InstancedStaticMeshComponent->AddInstances(Transforms, false, true);
-
-			
-			UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(NiagaraComponent, TEXT("SplinePointsArray"), SampleEmitterPoints);
+			//TODO 以后把速度方向也传进来
+			UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(NiagaraComponent, TEXT("SplinePointsArray"), SourceEmitterAttributes.GetLocations());
 
 			//获取场景中KillBox的大小和位置传入Niagara
-			FVector KillBoxLocation = BoxComponent->GetComponentLocation();
-			FVector KillBoxBounds = BoxComponent->GetScaledBoxExtent()*2.0f;
+			const FVector KillBoxLocation = BoxComponent->GetComponentLocation();
+			const FVector KillBoxBounds = BoxComponent->GetScaledBoxExtent()*2.0f;
 			NiagaraComponent->SetNiagaraVariableVec3(TEXT("BoxPosition"), KillBoxLocation);
 			NiagaraComponent->SetNiagaraVariableVec3(TEXT("BoxSize"), KillBoxBounds);
 
-			
+
 		}
 
 			
@@ -336,13 +351,13 @@ void AWaterFall::CollectionParticleDataBuffer()
 		return;
 	
 	auto SystemSimulation = StoreSystemInstance->GetSystemSimulation();
+	
 	const bool bSystemSimulationValid = SystemSimulation.IsValid() && SystemSimulation->IsValid();
 	//等待异步完成再去访问资源，否则触发崩溃
 	if(bSystemSimulationValid)
 	{
 		SystemSimulation->WaitForInstancesTickComplete();
 	}
-	
 	//TArray<FParticleData> ParticleDataArray; //储存所有发射器的粒子数据
 	FCustomNiagaraDataSetAccessor DataSetAccessor;
 	
@@ -366,6 +381,9 @@ void AWaterFall::CollectionParticleDataBuffer()
 
 		const FNiagaraDataBuffer* DataBuffer = ParticleDataSet->GetCurrentData();
 		const FNiagaraDataSetCompiledData& CompiledData = ParticleDataSet->GetCompiledData();
+		CacheFromCompiledData(CompiledData);
+		
+
 		
 		if(!DataBuffer || !DataBuffer->GetNumInstances())
 		{
@@ -403,6 +421,23 @@ void AWaterFall::CollectionParticleDataBuffer()
 			ParticleDataArray.Add(TempParticleData);
 			
 		}
+		FNiagaraDataSet* CollisionDataSet = StoreSystemInstance->GetEventDataSet(FName(TEXT("Fountain")), FName(TEXT("Collision")));
+		
+		if (CollisionDataSet)
+		{
+			int32 NumInstances = CollisionDataSet->GetNumInstances();
+			for (int32 Index = 0; Index < NumInstances; ++Index)
+			{
+				// 获取粒子的碰撞位置
+				FVector CollisionPosition = CollisionDataSet->GetVector<FNiagaraFloat3>(FNiagaraVariable(FNiagaraTypeDefinition::GetVec3Def(), TEXT("CollisionLocation")), Index);
+
+				// 获取粒子的ID
+				int32 ParticleID = CollisionDataSet->GetInt32(FNiagaraVariable(FNiagaraTypeDefinition::GetIntDef(), TEXT("ParticleID")), Index);
+
+				// 将粒子ID和碰撞位置添加到TMap中
+				ParticleIDToCollisionPositionMap.Add(ParticleID, CollisionPosition);
+			}
+		}
 		/*
 		for(const FParticleData& particle : ParticleDataArray)
 		{
@@ -422,6 +457,7 @@ void AWaterFall::CollectionParticleDataBuffer()
 	
 }
 
+
 void AWaterFall::GenerateWaterFallSpline()
 {
 	//由于DataBuffer是在间隔时间内传输多个粒子数据，所以绘制spline的时候不需要之前的数据，要清空ParticleDataArray
@@ -429,6 +465,8 @@ void AWaterFall::GenerateWaterFallSpline()
 
 	//间隔时间内收集DataBuffer
 	CollectionParticleDataBuffer();
+
+
 	//绘制spline
 	for(const FParticleData& Particle : ParticleDataArray)
 	{
@@ -524,7 +562,7 @@ void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePositio
 	//储存SplineComponent和长度 Resample用
 	CachedSplineOriginalLengths.Add(WaterFallSpline, WaterFallSpline->GetSplineLength());
 	BackupSplineData.Add(WaterFallSpline, WaterFallSpline);
-
+	GEditor->RedrawLevelEditingViewports(true);
 }
 
 
@@ -610,6 +648,7 @@ void AWaterFall::ClearAllResource()
 	ParticleIDToSplineComponentMap.Empty();
 	CachedSplineOriginalLengths.Empty();
 	BackupSplineData.Empty();
+	EmitterPoints.Empty();
 	UE_LOG(LogTemp, Warning, TEXT("Cleared all Spline and SplineMesh components"));
 }
 
@@ -1044,6 +1083,7 @@ FVector2f AWaterFall::CalculateUVOffsetBasedOnSpline (const USplineComponent* Sp
 }
 
 
+
 void AWaterFall::ResetParameters()
 {
 	return;
@@ -1098,19 +1138,26 @@ void AWaterFall::PostEditUndo()
 	SplineDataChangedEvent.Broadcast();
 }
 
-void AWaterFall::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+//PostEditChangeChainProperty可以检测整个属性链上的多个属性，PostEditChangeProperty 通常用于响应单一属性的更改
+void AWaterFall::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) 
 {
-	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	FProperty* PropertyThatChanged = PropertyChangedEvent.MemberProperty;
+	const FName PropertyName = PropertyThatChanged ? PropertyThatChanged->GetFName() : NAME_None;
+
 	if(PropertyChangedEvent.Property != nullptr)
 	{
-		const FName PropertyName = PropertyChangedEvent.Property->GetFName();
-		
-		
-		if(PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, SampleNumber))
+		if(!(PropertyChangedEvent.ChangeType == EPropertyChangeType::Interactive))
+			Super::PostEditChangeProperty(PropertyChangedEvent);
+		if(PropertyChangedEvent.ChangeType == EPropertyChangeType::Interactive)
+			return;
+		if(PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, SplineCount))
 		{
 			//ReGenerateSplineAfterResample();
-			ReGenerateSplineAfterResampleWithNumber();
+			//ReGenerateSplineAfterResampleWithNumber();
+			UpdateEmitterPoints();
 		}
+
 		else if (PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, StartWidthRange) || PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, EndWidthRange))
 		{
 			GenerateSplineMesh();
@@ -1128,6 +1175,17 @@ void AWaterFall::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEv
 			ClusterSplines();
 		}
 	}
+}
+
+void AWaterFall::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	if(EmitterSpline->bSplineHasBeenEdited)
+	{
+		UpdateEmitterPoints();
+
+	}
+
 }
 
 
