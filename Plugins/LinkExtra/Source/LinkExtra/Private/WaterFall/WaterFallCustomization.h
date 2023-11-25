@@ -19,6 +19,6 @@ public:
 private:
 	/* Contains references to all selected objects inside in the viewport */
 	TArray<TWeakObjectPtr<UObject>> SelectedObjects;
-	
+	TWeakObjectPtr<AWaterFall> TargetActor;
 };
 #endif

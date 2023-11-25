@@ -84,22 +84,24 @@ public:
 
 	USplineProcessor();
 	
-	UPROPERTY(EditAnywhere, Category = "Spline|Cluster", DisplayName="分簇参数")
+	UPROPERTY(EditAnywhere, Category = "ClusterSpline", DisplayName="分簇参数")
 	FClusterWeight WeightData;
 	
-	UPROPERTY(VisibleAnywhere, Category = "Spline|Clusters")
+	UPROPERTY(VisibleAnywhere, Category = "ClusterSpline")
 	TArray<FCluster> Clusters;
 	
 
+	
 	const TArray<FCluster>& USplineProcessor::GetClusters() const
 	{
 		return Clusters;
 	}
 	
-	//对输入的spline进行筛选(删除一些过短，流向差异过大的spline)然后分簇
+	//对输入的spline进行筛选(删除一些过短，流向差异过大的spline)然后分簇,这是一个总的函数，包含了下面几个函数。
 	void ProcessSplines(TArray<USplineComponent*>& SplineComponents);
 
 	//删除过短的水流和跨越X轴太远的Splines
+	//FitteredSplines是WaterFall的成员，用在这个函数里面
 	void FitterSplines(TArray<USplineComponent*>& SplineComponents, const float SplineMaxLength);
 
 	//填充SplineData

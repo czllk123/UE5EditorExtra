@@ -100,8 +100,11 @@ struct FParticleData
 	UPROPERTY(BlueprintReadOnly)
 	float Age;
 
+	UPROPERTY(BlueprintReadOnly)
+	float CollisionDelayTimer;
+
 	FParticleData()
-		: UniqueID(0), Position(FVector::ZeroVector), Velocity(FVector::ZeroVector), Age(0.0f)
+		: UniqueID(0), Position(FVector::ZeroVector), Velocity(FVector::ZeroVector), Age(0.0f), CollisionDelayTimer(0.0f)
 	{
 	}
 };
@@ -144,7 +147,7 @@ class LINKEXTRA_API AWaterFall : public AActor
 {
 	GENERATED_BODY()
 	friend class FWaterFallCustomization;
-
+	friend class USplineProcessor;
 
 	typedef TSharedPtr<class FNiagaraDataSetReadback, ESPMode::ThreadSafe> FGpuDataSetPtr;
 	struct FGpuEmitterCache
@@ -158,30 +161,31 @@ public:
 	// Sets default values for this actor's properties
 	AWaterFall();
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "WaterFall")
 	USceneComponent* SceneRoot;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "WaterFall")
 	UNiagaraComponent* Niagara;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "WaterFall")
 	UInstancedStaticMeshComponent* InstancedStaticMeshComponent;
+
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WaterFall")
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "WaterFall")
 	UBoxComponent* KillBox;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "WaterFall")
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "WaterFall")
 	USplineComponent* EmitterSpline;
 	const USplineComponent* GetEmitterSpline() const  {return EmitterSpline;}
 
 	UPROPERTY(Category="Simulate",BlueprintReadWrite)
 	bool bSimulateValid = true;
 
-	UPROPERTY(EditAnywhere, Category = "Spline Clustering")
+	UPROPERTY(VisibleDefaultsOnly, Category = "Spline Clustering")
 	USplineProcessor* SplineProcessorInstance; 
 	
 	//要获取的粒子的信息
-	TArray<FName> ParticlesVariables = {"UniqueID","Position",  "Velocity", "Age"};
+	TArray<FName> ParticlesVariables = {"UniqueID","Position",  "Velocity", "Age", "CollisionDelayTimer"};
 
 	FNiagaraSystemInstance* StoreSystemInstance;
 	
@@ -191,63 +195,102 @@ public:
 
 	/////////////////////////////////////////////DetailParameters//////////////////////////////////////
 
-	UPROPERTY(EditAnywhere, Category = "WaterFall|EmitterSource", DisplayName="是否贴地")
-	bool bSnapToGround = false;
-
-	UPROPERTY(EditAnywhere, Category = "WaterFall|EmitterSource", DisplayName="随机数")
-	int32 Seed = 666;
-
-	UPROPERTY(EditAnywhere, Category= "WaterFall|EmitterSource", DisplayName="坡度剔除")
-	FVector2D SlopeRange = {0, 90};
-	
-	UPROPERTY(EditAnywhere, Category = "WaterFall|EmitterSource", DisplayName="粒子模拟数量", BlueprintReadWrite, meta = (ClampMin = " 1"), meta = (ClampMax = "200"))
-	int32 SplineCount = 10;
-	
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Simulation", DisplayName="初始位置偏移")
-	float Disturb = 0.0f;
-	
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Simulation", DisplayName="粒子生命周期")
-	float ParticleLife = 7.0f;
-	
-
-
-	//瀑布SplineMesh引用的StaticMesh
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh", DisplayName="输入生成瀑布的静态网格", meta = (ClampMin = " 1"), meta = (ClampMax = "20"))
-	UStaticMesh* WaterFallMesh;
-	
-	//获取粒子buffer的时间间隔
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = " 0.1"), meta = (ClampMax = "2"))
-	float GetDataBufferRate = 0.1f;
-	
-	//面片开始宽度
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh", BlueprintReadWrite, meta = (ClampMin = " 0"), meta = (ClampMax = "5"))
-	FVector2D StartWidthRange  = FVector2D(2,5);
-	
-	// 面片结束宽度范围
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Mesh", BlueprintReadWrite, meta = (ClampMin = "5", ClampMax = "10"))
-	FVector2D EndWidthRange = FVector2D(5.0, 7.0);
-
-	//Spline重采样间距
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "10"))
-	float  RestLength = 2;
-
-	//Spline重采样点数量
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "100"))
-	int32 SampleNumber = 10;
-
-	//分簇
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Cluster", DisplayName="分簇参数")
-	FClusterWeight ClusterParameters;
-	
-	
-	//资产名称
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Save",DisplayName="资产名称")
+	// 资产名称
+	UPROPERTY(EditAnywhere, Category = "SaveToDisk",DisplayName="资产名称")
 	FString MeshName = "WaterFallMesh";
 
 	//保存路径
-	UPROPERTY(EditAnywhere, Category = "WaterFall|Save",DisplayName="保存路径")
+	UPROPERTY(EditAnywhere, Category = "SaveToDisk",DisplayName="保存路径")
 	FString SavePath = "/Game/BP/";
 
+	
+	UPROPERTY(EditDefaultsOnly, Category = "EmissionSourceSetup", DisplayName="是否贴地")
+	bool bSnapToGround = false;
+
+	UPROPERTY(EditAnywhere, Category = "EmissionSourceSetup", DisplayName="随机数")
+	int32 Seed = 666;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "EmissionSourceSetup", DisplayName="初始位置偏移")
+	float Disturb = 0.0f;
+
+	UPROPERTY(EditAnywhere, Category = "EmissionSourceSetup", DisplayName="发射粒子大小", meta = (ClampMin = " 0.2"), meta = (ClampMax = "2"))
+	float ISMScale = 1.0f;
+	
+
+	UPROPERTY(EditDefaultsOnly, Category= "EmissionSourceSetup", DisplayName="坡度剔除")
+	FVector2D SlopeRange = {0, 90};
+	
+	UPROPERTY(EditAnywhere, Category = "EmissionSourceSetup", DisplayName="粒子模拟数量", BlueprintReadWrite, meta = (ClampMin = " 1"), meta = (ClampMax = "200"))
+	int32 SplineCount = 50;
+	
+
+	UPROPERTY(EditAnywhere, Category = "Simulation", DisplayName="粒子生命周期")
+	float ParticleLife = 7.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Simulation", DisplayName="粒子初始速度大小")
+	float ParticleVelocity = 1.0f;
+
+	//获取粒子buffer的时间间隔
+	UPROPERTY(EditAnywhere, Category = "Simulation", BlueprintReadWrite, meta = (ClampMin = " 0.1"), meta = (ClampMax = "2"), DisplayName="获取Buffer间隔时间")
+	float GetDataBufferRate = 0.1f;
+	
+
+	//Spline重采样间距
+	UPROPERTY(EditAnywhere, Category = "ResampleSpline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "10"), DisplayName="重采样分段长度")
+	float  RestLength = 2.0f;
+
+	//Spline重采样点数量
+	//UPROPERTY(EditAnywhere, Category = "WaterFall|Spline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "100")，DisplayName="重采样点数量")
+	int32 SampleNumber = 10;
+
+	//筛选曲线
+	UPROPERTY(EditAnywhere, Category = "FitterSpline", BlueprintReadWrite, meta = (ClampMin = "0"), meta = (ClampMax = "1"), DisplayName="筛选太短的Spline")
+	float Percent = 0.5f;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "FitterSpline", BlueprintReadWrite, meta = (ClampMin = "0"), meta = (ClampMax = "180"), DisplayName="与粒子发射方向的夹角")
+	float AngleRange = 30.0f;
+	
+	UPROPERTY(EditAnywhere, Category = "FitterSpline", BlueprintReadWrite, meta = (ClampMin = "0"), meta = (ClampMax = "1"), DisplayName="筛选横跨Y轴的Spline")
+	float CrossYAxisDistance = 0.5f;
+	
+	//分簇
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ClusterSpline", DisplayName="分簇数量")
+	int32 ClusterNumber;
+	
+	UPROPERTY(EditAnywhere, Category = "ClusterSpline", DisplayName="分簇参数")
+	FClusterWeight ClusterParameters;
+
+
+	
+	//面片开始宽度
+	UPROPERTY(EditAnywhere, Category = "SplineMesh", BlueprintReadWrite, meta = (ClampMin = " 0"), meta = (ClampMax = "10"),DisplayName="首部宽度范围")
+	FVector2D StartWidthRange  = FVector2D(2,5);
+	
+	// 面片结束宽度范围
+	UPROPERTY(EditAnywhere, Category = "SplineMesh", BlueprintReadWrite, meta = (ClampMin = "5", ClampMax = "20"),DisplayName="尾部宽度范围")
+	FVector2D EndWidthRange = FVector2D(5.0, 7.0);
+
+	//瀑布SplineMesh引用的StaticMesh
+	UPROPERTY(EditAnywhere, Category = "StaticMesh", DisplayName="输入生成瀑布的静态网格")
+	UStaticMesh* WaterFallMesh;
+	
+
+	//粒子
+	UPROPERTY(EditAnywhere, Category = "ParticleSettings",DisplayName="是否生成粒子")
+	bool bSpawnParticles = true;
+
+	UPROPERTY(EditAnywhere, Category = "ParticleSettings", meta = (ClampMin = "0.2", ClampMax = "2"),DisplayName="例子缩放比例")
+	FVector2D ParticleScaleRange = FVector2D(0.5, 1.5); // 粒子的最小缩放比例
+	
+	UPROPERTY(EditAnywhere, Category = "ParticleSettings",DisplayName="粒子之间的最小距离")
+	float MinDistanceBetweenParticles = 1000.0f; // 粒子之间的最小距离
+
+	//粒子引用
+	UPROPERTY(EditDefaultsOnly, Category = "ParticleSettings", DisplayName="中上部粒子资产引用")
+	TObjectPtr<UParticleSystem> CenterParticle;
+
+	UPROPERTY(EditAnywhere, Category = "ParticleSettings", DisplayName="底部粒子资产引用")
+	TObjectPtr<UParticleSystem> BottomParticle;
 	
 protected:
 	// Called when the game starts or when spawned
@@ -268,24 +311,24 @@ protected:
 	
 	FTimerHandle SimulationTimerHandle;
 
-	UFUNCTION(BlueprintCallable,CallInEditor, Category ="WaterFall")
+	UFUNCTION(BlueprintCallable, Category ="RestParameters")
 	void ResetParameters();
 	
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="收集粒子Buffer")
 	void CollectionParticleDataBuffer();
 
 	// 声明绑定Niagara事件的函数
-	void BindNiagaraEvents(UNiagaraComponent* NiagaraComponent);
+	//void BindNiagaraEvents(UNiagaraComponent* NiagaraComponent);
 
 	// 声明处理Niagara碰撞事件的函数
-	UFUNCTION()
-	void OnCollisionEvent(const FNiagaraCollisionEventPayload& CollisionEventPayload);
+	//UFUNCTION()
+	//void OnCollisionEvent(const FNiagaraCollisionEventPayload& CollisionEventPayload);
 	
 
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Spline", DisplayName="生成瀑布面片")
 	void GenerateWaterFallSpline();
 
-	UFUNCTION(BlueprintCallable,CallInEditor,Category="WaterFall", DisplayName="生成SplineMesh")
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成SplineMesh")
 	void GenerateSplineMesh();
 	
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成Spline曲线")
@@ -294,28 +337,34 @@ protected:
 	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成SplineMesh")
 	TArray<USplineMeshComponent*> UpdateSplineMeshComponent(USplineComponent* Spline);
 
-	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="清理资源")
+	UFUNCTION(BlueprintCallable, Category="WaterFall|Simulation", DisplayName="清理资源")
 	void ClearAllResource();
 
-	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="清理所有Mesh")
+	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="清理所有Mesh")
 	void ClearAllSplineMesh();
 
 	UFUNCTION(Category="Mesh",DisplayName="销毁StaticMeshActor")
 	void DestroyWaterFallMeshActor();
 	
-	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="重采样SplineTransform")
+	UFUNCTION( Category="WaterFall", DisplayName="重采样Spline")
 	static TArray<FVector> ResampleSplinePoints( const USplineComponent* InSpline, float ResetLength, float SplineLength);
 
-	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="重采样Spline")
+	UFUNCTION( Category="WaterFall", DisplayName="重采样Spline")
 	static TArray<FVector> ResampleSplinePointsWithNumber(const USplineComponent* InSpline, int32 SampleNum);
 
-	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="重新生成重采样后的曲线")
+	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="重新生成重采样后的曲线")
 	void ReGenerateSplineAfterResample();
 
-	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="重新生成重采样后的曲线")
+	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="重新生成重采样后的曲线")
 	void ReGenerateSplineAfterResampleWithNumber();
-
-	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="曲线分簇")
+	
+	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="计算两个向量之间的夹角")
+	static float GetAngleBetweenVectors(const FVector& A, const FVector& B);
+	
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="筛选曲线")
+	void FitterSplines(const float LengthPercent, const float DistancePercent, const float& Angle);
+	
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="曲线分簇")
 	void ClusterSplines();
 	
 	
@@ -324,7 +373,7 @@ protected:
 	
 	static void FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals, TArray<FVector2f>& UVs,  const TArray<int32>& Triangles);
 	
-	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="生成新的StaticMesh")
+	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成新的StaticMesh")
 	void RebuildWaterFallMesh();
 
 	UFUNCTION(Category = "WaterFall|Save", DisplayName="保存StaticMesh到磁盘")
@@ -335,9 +384,15 @@ protected:
 	FVector2f CalculateUVOffsetBasedOnSpline(const USplineComponent* SplineComponent,
 	const USplineMeshComponent* CurrentSplineMeshComponent,
 	const TArray<USplineMeshComponent*>& AllSplineMeshComponents, float SegmentLength);
-	
+
+
+	void SpawnParticles();
+	void ClearSpawnedParticles();
 
 	//virtual void PerformAction(FNiagaraEmitterInstance& OwningSim, const FNiagaraEventReceiverProperties& OwningEventReceiver) override;
+
+	//UFUNCTION(Category= "WaterFall|Particles", DisplayName="计算粒子点位")
+	//TArray<FVector>CalculateParticleLocation();
 
 	
 #if WITH_EDITOR
@@ -361,7 +416,7 @@ private:
 	FEmitterAttributes SourceEmitterAttributes;
 
 	//在场景中被选择的Spline粒子发射器
-	USplineComponent* SelectedSplineComponent = nullptr;
+	//USplineComponent* SelectedSplineComponent = nullptr;
 	
 	/** Index of this instance in the system simulation. */
 	int32 SystemInstanceIndex;
@@ -381,8 +436,8 @@ private:
 	//粒子ID和SplineComponent映射map
 	TMap<int32, USplineComponent*> ParticleIDToSplineComponentMap;
 
-	// 存储SplineMeshComponent的数组
-	//TArray<USplineMeshComponent*> CachedSplineMeshComponents;
+	//筛选后的Spline
+	TArray<USplineComponent*>VaildSplines;
 	
 
 	//存储每条Spline上对应的所有SplineMeshComponent, 重建StaticMesh用
@@ -408,7 +463,9 @@ private:
 
 	//先在RebuildStaticMeshFromSplineMesh函数中设置StaticMesh的默认材质,再保存资产
 	UMaterialInterface* DefaultMaterial = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, TEXT("/Game/BP/Materials/Checker_Mat.Checker_Mat")));
-	
+
+	UPROPERTY()
+	TArray<UParticleSystemComponent*> SpawnedParticles;
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;

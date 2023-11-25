@@ -49,9 +49,10 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
-
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Kismet/GameplayStatics.h"
 // Sets default values
-AWaterFall::AWaterFall()
+AWaterFall::AWaterFall() 
 {
 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
@@ -76,9 +77,9 @@ AWaterFall::AWaterFall()
 	InstancedStaticMeshComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("InstancedStaticMesh"));
 	InstancedStaticMeshComponent->SetupAttachment(RootComponent);
 	InstancedStaticMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	InstancedStaticMeshComponent->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Game/BP/StaticMesh/Sphere.StaticMesh")));
 	
-	
-	KillBox = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxCollision"));
+	KillBox = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxCollision")); 
 	KillBox->SetupAttachment(RootComponent);
 	KillBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	KillBox->SetBoxExtent(FVector(32,32,32));
@@ -221,7 +222,8 @@ void AWaterFall::ComputeEmitterPoints(USplineComponent* EmitterSplineComponent, 
 	for (const FEmitterPoints& EmitterPoint : this->EmitterPoints)
 	{
 		FTransform Transform(EmitterPoint.Location);
-		Transform.SetScale3D(FVector(0.2f,0.2f,0.2f));
+		FVector ScaleVector(ISMScale, ISMScale, ISMScale);
+		Transform.SetScale3D(ScaleVector);
 		
 		ValidTransforms.Add(Transform);
 	}
@@ -381,9 +383,6 @@ void AWaterFall::CollectionParticleDataBuffer()
 
 		const FNiagaraDataBuffer* DataBuffer = ParticleDataSet->GetCurrentData();
 		const FNiagaraDataSetCompiledData& CompiledData = ParticleDataSet->GetCompiledData();
-		CacheFromCompiledData(CompiledData);
-		
-
 		
 		if(!DataBuffer || !DataBuffer->GetNumInstances())
 		{
@@ -417,35 +416,25 @@ void AWaterFall::CollectionParticleDataBuffer()
 				{
 					DataSetAccessor.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.UniqueID);
 				}
+				else if(ParticleVar == "CollisionDelayTimer")
+				{
+					DataSetAccessor.GetParticleDataFromDataBuffer(CompiledData, DataBuffer, ParticleVar, iInstance, TempParticleData.CollisionDelayTimer);
+				
+				}
 			}
 			ParticleDataArray.Add(TempParticleData);
 			
 		}
-		FNiagaraDataSet* CollisionDataSet = StoreSystemInstance->GetEventDataSet(FName(TEXT("Fountain")), FName(TEXT("Collision")));
-		
-		if (CollisionDataSet)
-		{
-			int32 NumInstances = CollisionDataSet->GetNumInstances();
-			for (int32 Index = 0; Index < NumInstances; ++Index)
-			{
-				// 获取粒子的碰撞位置
-				FVector CollisionPosition = CollisionDataSet->GetVector<FNiagaraFloat3>(FNiagaraVariable(FNiagaraTypeDefinition::GetVec3Def(), TEXT("CollisionLocation")), Index);
 
-				// 获取粒子的ID
-				int32 ParticleID = CollisionDataSet->GetInt32(FNiagaraVariable(FNiagaraTypeDefinition::GetIntDef(), TEXT("ParticleID")), Index);
-
-				// 将粒子ID和碰撞位置添加到TMap中
-				ParticleIDToCollisionPositionMap.Add(ParticleID, CollisionPosition);
-			}
-		}
 		/*
 		for(const FParticleData& particle : ParticleDataArray)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Particle Data - UniqueID: %d, Position: %s, Velocity: %s, Age: %f"), 
+			UE_LOG(LogTemp, Warning, TEXT("Particle Data - UniqueID: %d, Position: %s, Velocity: %s, Age: %f, CollisionDelayTimer: %f"), 
 				   particle.UniqueID, 
 				   *particle.Position.ToString(), 
 				   *particle.Velocity.ToString(), 
-				   particle.Age);
+				   particle.Age,
+				   particle.CollisionDelayTimer);
 		}
 		UE_LOG(LogTemp, Error, TEXT("============================================================================"));
 		
@@ -480,13 +469,14 @@ void AWaterFall::GenerateWaterFallSpline()
 void AWaterFall::ClusterSplines()
 {
 
-	TArray<USplineComponent*> SplineComponents;
-	CachedSplineOriginalLengths.GetKeys(SplineComponents);
+	//TArray<USplineComponent*> SplineComponents;
+	//CachedSplineOriginalLengths.GetKeys(SplineComponents);
 	
 	USplineProcessor* TempProcessor = NewObject<USplineProcessor>();
 	TempProcessor->WeightData = this->ClusterParameters;
-	TempProcessor->ProcessSplines(SplineComponents);
+	TempProcessor->ProcessSplines(VaildSplines);
 	ClustersToUse = TempProcessor->GetClusters();
+	ClusterNumber = ClustersToUse.Num();
 	//SplineProcessorInstance->ProcessSplines(SplineComponents);
 
 }
@@ -533,6 +523,7 @@ void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePositio
 	{
 		WaterFallSpline = *SplineComponentPtr;
 		WaterFallSpline->AddSplineWorldPoint(ParticlePosition);
+		WaterFallSpline->MarkRenderStateDirty();
 
 	}
 	else
@@ -546,15 +537,16 @@ void AWaterFall::UpdateSplineComponent(int32 ParticleID, FVector ParticlePositio
 		WaterFallSpline->SetVisibility(true, true);
 		WaterFallSpline->ClearSplinePoints(true);
 		WaterFallSpline->AddSplinePointAtIndex(ParticlePosition,0, ESplineCoordinateSpace::World,true );
-
+		WaterFallSpline->SetDrawDebug(true);
 		//这个Map是粒子ID和SplineComponent的一个映射，判断接下来收集到的Buffer该绘制那根曲线
 		ParticleIDToSplineComponentMap.Add(ParticleID, WaterFallSpline);
 
 #if WITH_EDITORONLY_DATA
-		const FLinearColor RandomColor(RandomStream.FRand(), RandomStream.FRand(), RandomStream.FRand(), 1.0f);
-		WaterFallSpline->EditorUnselectedSplineSegmentColor = RandomColor;
+		//const FLinearColor RandomColor(RandomStream.FRand(), RandomStream.FRand(), RandomStream.FRand(), 1.0f);
+		//WaterFallSpline->EditorUnselectedSplineSegmentColor = FColor(1.0f, 1.0f, 1.0f, 1.0f);
 		//UE_LOG(LogTemp,Warning,TEXT("Color : %s"),*RandomColor.ToString());
-		WaterFallSpline->EditorSelectedSplineSegmentColor=(FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
+		//WaterFallSpline->EditorSelectedSplineSegmentColor=(FColor(1.0f, 0.0f, 0.0f, 1.0f));
+		WaterFallSpline->MarkRenderStateDirty();
 #endif
 		
 	}
@@ -642,6 +634,7 @@ void AWaterFall::ClearAllResource()
 
 	//清理SplineMesh和TMap
 	ClearAllSplineMesh();
+	ClearSpawnedParticles();
 	CachedSplineAndSplineMeshes.Empty();
 	
 	//清空Spline相关的TMap
@@ -649,6 +642,7 @@ void AWaterFall::ClearAllResource()
 	CachedSplineOriginalLengths.Empty();
 	BackupSplineData.Empty();
 	EmitterPoints.Empty();
+	VaildSplines.Empty();
 	UE_LOG(LogTemp, Warning, TEXT("Cleared all Spline and SplineMesh components"));
 }
 
@@ -663,6 +657,7 @@ void AWaterFall::ClearAllSplineMesh()
 			if(SplineMeshComponent)
 			{
 				SplineMeshComponent->DestroyComponent();
+
 			}
 		}
 	}
@@ -724,6 +719,64 @@ void AWaterFall::ReGenerateSplineAfterResampleWithNumber()
 	}
 }
 
+float AWaterFall::GetAngleBetweenVectors(const FVector& A, const FVector& B)
+{
+	// 计算两个向量的点积
+	const float DotProduct = FVector::DotProduct(A.GetSafeNormal(), B.GetSafeNormal());
+	// 通过点积计算夹角的余弦值
+	const float CosAngle = FMath::Clamp(DotProduct, -1.0f, 1.0f);
+	// 计算并返回夹角的度数
+	return FMath::RadiansToDegrees(acosf(CosAngle));
+}
+
+void AWaterFall::FitterSplines(const float LengthPercent, const float DistancePercent, const float& Angle)
+{
+	VaildSplines.Empty();
+	
+	// 首先找到最长的样条线长度
+	float SplineMaxLength = 0.0f;
+	for(const auto& Elem : ParticleIDToSplineComponentMap)
+	{
+		USplineComponent* SplineComponent = Elem.Value;
+		SplineMaxLength = FMath::Max(SplineMaxLength, SplineComponent->GetSplineLength());
+	}
+	//粒子的发射方向
+	//TODO 以后换成粒子点带的方向
+	const FVector ParticleEmissionDirection = FVector(0.0f, -1.0f, 0.0f);
+	
+	for( const auto& Elem : ParticleIDToSplineComponentMap)
+	{
+		USplineComponent* SplineComponent = Elem.Value;
+		const float CurrentSplineLength = SplineComponent->GetSplineLength();
+		const float EmitterSplineLength = EmitterSpline->GetSplineLength()/2;
+		
+		const FVector StartPosition = SplineComponent->GetLocationAtSplinePoint(0, ESplineCoordinateSpace::World);
+		const FVector EndPosition = SplineComponent->GetLocationAtSplinePoint(SplineComponent->GetNumberOfSplinePoints() - 1, ESplineCoordinateSpace::World);
+		const float Distance = FMath::Abs(EndPosition.Y - StartPosition.Y);
+		
+		// 计算样条线起点的切线方向
+		FVector SplineTangent = SplineComponent->GetTangentAtSplinePoint(0, ESplineCoordinateSpace::World).GetSafeNormal();
+		
+		// 计算切线方向与粒子发射方向之间的夹角
+		 const float VectorAngle = GetAngleBetweenVectors(SplineTangent, ParticleEmissionDirection);
+
+		if(CurrentSplineLength / SplineMaxLength >= LengthPercent /*&& VectorAngle <= Angle*/ && Distance/EmitterSplineLength <= DistancePercent)
+		{
+			VaildSplines.Add(SplineComponent);
+			SplineComponent->EditorUnselectedSplineSegmentColor = FLinearColor(1.0f, 1.0f, 1.0f, 1.0f);
+			
+			SplineComponent->MarkRenderStateDirty();
+		}
+		else
+		{
+			SplineComponent->EditorUnselectedSplineSegmentColor = FLinearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		
+			SplineComponent->MarkRenderStateDirty();
+		}
+
+	}
+	
+}
 
 
 TArray<FVector> AWaterFall::ResampleSplinePointsWithNumber(const USplineComponent* InSpline, int32 SampleNum)
@@ -767,7 +820,7 @@ TArray<FVector> AWaterFall::ResampleSplinePoints( const USplineComponent* InSpli
 	float Duration = InSpline->Duration;
 
 
-	UE_LOG(LogTemp, Warning, TEXT("Length : %f "), SplineLength);
+	//UE_LOG(LogTemp, Warning, TEXT("Length : %f "), SplineLength);
 	int32 Segments = FMath::FloorToInt(SplineLength / ResetLength);
 	float DiffLength = SplineLength - ResetLength * Segments; // Remaining length
 
@@ -1082,11 +1135,106 @@ FVector2f AWaterFall::CalculateUVOffsetBasedOnSpline (const USplineComponent* Sp
 	return FVector2f(0, UVOffsetValue);
 }
 
+void AWaterFall::SpawnParticles()
+{
+	ClearSpawnedParticles();
+    
+    if(bSpawnParticles)
+    {
+        // 遍历所有有效的样条线
+        for(USplineComponent* Spline : VaildSplines)
+        {
+            if(Spline != nullptr)
+            {
+                // 获取样条线上的点的数量
+                int32 NumberOfPoints = Spline->GetNumberOfSplinePoints();
 
+                if(NumberOfPoints > 3)
+                {
+                    // 获取样条线的第一个点的位置
+                    FVector StartPointLocation = Spline->GetLocationAtSplinePoint(0, ESplineCoordinateSpace::World);
+                    // 获取样条线的最后一个点的位置
+                    FVector EndPointLocation = Spline->GetLocationAtSplinePoint(NumberOfPoints - 1, ESplineCoordinateSpace::World);
+
+                    // 随机选择一个大小
+                    float RandomScale = FMath::RandRange(ParticleScaleRange.X, ParticleScaleRange.Y);
+
+                    // 在样条线的起始点生成粒子1
+                    UParticleSystemComponent* SpawnedParticle1 = UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), CenterParticle, StartPointLocation, FRotator::ZeroRotator, FVector(RandomScale), true);
+                    if (IsValid(SpawnedParticle1))
+                    {
+                        SpawnedParticles.Add(SpawnedParticle1);
+                    }
+
+                    // 在样条线的终点生成粒子2
+                    UParticleSystemComponent* SpawnedParticle2 = UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), BottomParticle, EndPointLocation, FRotator::ZeroRotator, FVector(RandomScale), true);
+                    if (IsValid(SpawnedParticle2))
+                    {
+                        SpawnedParticles.Add(SpawnedParticle2);
+                    }
+                }
+            }
+        }
+
+        // 删除距离过近的粒子
+        for (int32 i = 0; i < SpawnedParticles.Num(); ++i)
+        {
+            if (!IsValid(SpawnedParticles[i]))
+                continue;
+
+            for (int32 j = i + 1; j < SpawnedParticles.Num(); ++j)
+            {
+                if (!IsValid(SpawnedParticles[j]))
+                    continue;
+
+                if (FVector::Dist(SpawnedParticles[i]->GetComponentLocation(), SpawnedParticles[j]->GetComponentLocation()) < MinDistanceBetweenParticles)
+                {
+                    SpawnedParticles[j]->DestroyComponent();
+                    SpawnedParticles.RemoveAt(j);
+                    --j; // Make sure to decrement j after removing an element to keep the index valid.
+                }
+            }
+        }
+    }
+}
+
+void AWaterFall::ClearSpawnedParticles()
+{
+	// 清除所有生成的粒子
+	for (UParticleSystemComponent* ParticleComp : SpawnedParticles)
+	{
+		if (IsValid(ParticleComp))
+		{
+			ParticleComp->DestroyComponent(); 
+		}
+	}
+	SpawnedParticles.Empty(); // 清空数组
+}
+
+/*
+TArray<FVector> AWaterFall::CalculateParticleLocation()
+{
+	for(const auto& SplineLengthPair : CachedSplineOriginalLengths)
+	{
+		USplineComponent* InSpline = SplineLengthPair.Key;
+		
+		
+	}
+}
+*/
 
 void AWaterFall::ResetParameters()
 {
-	return;
+	bSnapToGround = false;
+	ISMScale = 1.0f;
+	Seed = 666;
+	Disturb = 0.0f;
+	SlopeRange = {0, 90};
+	SplineCount = 50;
+	ParticleLife = 7.0f;
+	ParticleVelocity = 1.0f;
+	GetDataBufferRate = 0.1f;
+	RestLength = 2.0f;
 }
 
 const FNiagaraDataSet* AWaterFall::GetParticleDataSet(FNiagaraSystemInstance* SystemInstance, FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter)
@@ -1141,14 +1289,14 @@ void AWaterFall::PostEditUndo()
 //PostEditChangeChainProperty可以检测整个属性链上的多个属性，PostEditChangeProperty 通常用于响应单一属性的更改
 void AWaterFall::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) 
 {
-
+	Super::PostEditChangeProperty(PropertyChangedEvent);
 	FProperty* PropertyThatChanged = PropertyChangedEvent.MemberProperty;
 	const FName PropertyName = PropertyThatChanged ? PropertyThatChanged->GetFName() : NAME_None;
 
 	if(PropertyChangedEvent.Property != nullptr)
 	{
-		if(!(PropertyChangedEvent.ChangeType == EPropertyChangeType::Interactive))
-			Super::PostEditChangeProperty(PropertyChangedEvent);
+		//if(!(PropertyChangedEvent.ChangeType == EPropertyChangeType::Interactive))
+			
 		if(PropertyChangedEvent.ChangeType == EPropertyChangeType::Interactive)
 			return;
 		if(PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, SplineCount))
@@ -1158,9 +1306,9 @@ void AWaterFall::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEv
 			UpdateEmitterPoints();
 		}
 
-		else if (PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, StartWidthRange) || PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, EndWidthRange))
+		else if (PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, Percent) || PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, CrossYAxisDistance))
 		{
-			GenerateSplineMesh();
+			FitterSplines(Percent, CrossYAxisDistance, NULL);
 		}
 		else if(PropertyName == GET_MEMBER_NAME_CHECKED(AWaterFall, RestLength))
 		{

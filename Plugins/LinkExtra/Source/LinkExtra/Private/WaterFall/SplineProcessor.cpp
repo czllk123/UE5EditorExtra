@@ -1,4 +1,6 @@
 ﻿#include "SplineProcessor.h"
+
+#include "WaterFall.h"
 #include "Components/SplineComponent.h"
 
 
@@ -19,14 +21,16 @@ void USplineProcessor::ProcessSplines(TArray<USplineComponent*>& SplineComponent
 		}
 	}
 	
-	FitterSplines(SplineComponents, SplineMaxLength);
+	//FitterSplines(SplineComponents, SplineMaxLength);
 	TArray<FSplineData> SplineData = FillSplineData(SplineComponents);
-	Clusters = BuildClusters(SplineComponents, SplineData, WeightData); 
-	UE_LOG(LogTemp,Error,TEXT("num is : %d"), Clusters.Num());
+	Clusters = BuildClusters(SplineComponents, SplineData, WeightData);
+
+	//UE_LOG(LogTemp,Error,TEXT("Cluster number is : %d"), Clusters.Num());
 }
 
 void USplineProcessor::FitterSplines(TArray<USplineComponent*>& InOutSplineComponents, const float SplineMaxLength)
 {
+	
 	for(int32 i = 0; i < InOutSplineComponents.Num();)
 	{
 		const USplineComponent* SplineComponent = InOutSplineComponents[i];
