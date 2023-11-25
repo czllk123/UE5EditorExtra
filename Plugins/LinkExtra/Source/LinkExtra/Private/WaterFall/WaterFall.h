@@ -140,6 +140,15 @@ struct FEmitterPoints
 	
 };
 
+//储存buffer数据
+struct FLODData
+{
+	TArray<FVector3f> Vertices;
+	TArray<FVector3f> Normals;
+	TArray<FVector2f> UVs;
+	TArray<int32> Triangles;
+	int32 VertexCount; // 用于追踪当前LOD的顶点数量
+};
 
 UCLASS(hidecategories=(Tags, AssetUserData, Rendering, Physics,
 	Activation, Collision, Cooking, HLOD, Networking, Input, LOD, Actor,Replication, Navigation, PathTracing, DataLayers, WorldPartition))
@@ -272,7 +281,7 @@ public:
 
 	//瀑布SplineMesh引用的StaticMesh
 	UPROPERTY(EditAnywhere, Category = "StaticMesh", DisplayName="输入生成瀑布的静态网格")
-	UStaticMesh* WaterFallMesh;
+	UStaticMesh* SourceStaticMesh;
 	
 
 	//粒子
@@ -388,11 +397,27 @@ protected:
 
 	void SpawnParticles();
 	void ClearSpawnedParticles();
+	
 
-	//virtual void PerformAction(FNiagaraEmitterInstance& OwningSim, const FNiagaraEventReceiverProperties& OwningEventReceiver) override;
+	// 计算变换后的顶点位置和法线的辅助函数
+	static void CalculateDeformedPositionAndNormal(const USplineMeshComponent* SplineMesh, const FVector3f& LocalPosition, const FVector3f& LocalNormal, FVector& OutPosition, FVector& OutNormal);
 
-	//UFUNCTION(Category= "WaterFall|Particles", DisplayName="计算粒子点位")
-	//TArray<FVector>CalculateParticleLocation();
+	// 收集来自SplineMeshes的LOD数据
+	void CollectLODDataFromSplineMeshes(TMap<int32, FLODData>& LODDataMap);
+
+	// 为每个LOD创建MeshDescription
+	void CreateMeshDescriptionsForLODs(const TMap<int32, FLODData>& LODDataMap, TArray<FMeshDescription>& OutMeshDescriptions);
+
+	// 从MeshDescriptions创建StaticMesh
+	UStaticMesh* CreateStaticMeshFromLODMeshDescriptions(const TArray<FMeshDescription>& MeshDescriptions);
+	
+	void SpawnStaticMesh(UStaticMesh* StaticMesh);
+
+	UFUNCTION(CallInEditor, Category="WaterFall")
+	void BuildStaticMeshFromSplineMesh();
+
+	
+	
 
 	
 #if WITH_EDITOR
@@ -460,6 +485,9 @@ private:
 
 	//重建StaticMesh的Actor,用来存储和销毁
 	AStaticMeshActor* RebuildedStaticMeshActor = nullptr;
+
+	//生成的瀑布StaticMesh
+	UStaticMesh* GeneratedWaterFallMesh = nullptr;
 
 	//先在RebuildStaticMeshFromSplineMesh函数中设置StaticMesh的默认材质,再保存资产
 	UMaterialInterface* DefaultMaterial = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, TEXT("/Game/BP/Materials/Checker_Mat.Checker_Mat")));

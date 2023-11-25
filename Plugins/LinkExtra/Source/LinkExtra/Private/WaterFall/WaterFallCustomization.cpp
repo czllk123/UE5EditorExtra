@@ -215,6 +215,17 @@ void FWaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuild
 							 return FReply::Handled();
 						 })
 		];
+		Category.AddCustomRow(LOCTEXT("", ""), false)
+		[
+			SNew(SButton)
+			.HAlign(HAlign_Center)
+			.Text(LOCTEXT("StaticMesh", "清除瀑布面片"))
+			.OnClicked_Lambda([this]
+						 {
+							 if (TargetActor.IsValid()) TargetActor->DestroyWaterFallMeshActor();
+							 return FReply::Handled();
+						 })
+		];
 	}
 
 	//粒子设置
@@ -249,6 +260,17 @@ void FWaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuild
 	{
 		IDetailCategoryBuilder& Category = DetailBuilder.EditCategory("SaveToDisk", FText::FromString(TEXT("保存为资产")), ECategoryPriority::Important);
 		Category.InitiallyCollapsed(false);
+		Category.AddCustomRow(LOCTEXT("", ""), false)
+		[
+			SNew(SButton)
+			.HAlign(HAlign_Center)
+			.Text(LOCTEXT("SaveToDisk", "保存为资产"))
+			.OnClicked_Lambda([this]
+						 {
+							 if (TargetActor.IsValid()) TargetActor->SaveAssetToDisk(TargetActor->GeneratedWaterFallMesh, TargetActor->MeshName, TargetActor->SavePath);
+							 return FReply::Handled();
+						 })
+		];
 	}
 	
 }
