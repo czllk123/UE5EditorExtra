@@ -168,6 +168,17 @@ void FWaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuild
 							 return FReply::Handled();
 						 })
 		];
+		Category.AddCustomRow(LOCTEXT("", ""), false)
+		[
+			SNew(SButton)
+			.HAlign(HAlign_Center)
+			.Text(LOCTEXT("ClearSplines", "清理曲线"))
+			.OnClicked_Lambda([this]
+						 {
+							 if (TargetActor.IsValid()) TargetActor->ClearAllSpline();
+							 return FReply::Handled();
+						 })
+		];
 	}
 	
 	//生成清除预览面片
@@ -211,7 +222,13 @@ void FWaterFallCustomization::CustomizeDetails(IDetailLayoutBuilder& DetailBuild
 			.Text(LOCTEXT("StaticMesh", "生成瀑布面片"))
 			.OnClicked_Lambda([this]
 						 {
-							 if (TargetActor.IsValid()) TargetActor->RebuildWaterFallMesh();
+
+							 if (TargetActor.IsValid())
+							 {
+								 //TargetActor->BuildStaticMeshFromSplineMesh();
+							 	 TargetActor->RebuildWaterFallMesh();
+							 	 TargetActor->ClearAllSplineMesh();
+							 }
 							 return FReply::Handled();
 						 })
 		];

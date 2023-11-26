@@ -280,26 +280,26 @@ public:
 	FVector2D EndWidthRange = FVector2D(5.0, 7.0);
 
 	//瀑布SplineMesh引用的StaticMesh
-	UPROPERTY(EditAnywhere, Category = "StaticMesh", DisplayName="输入生成瀑布的静态网格")
-	UStaticMesh* SourceStaticMesh;
-	
+	UPROPERTY(EditAnywhere, Category = "SplineMesh", DisplayName="输入生成瀑布的静态网格")
+	UStaticMesh* SourceStaticMesh = Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(), nullptr, TEXT("/Game/BP/SM_WaterfallPlane_UV.SM_WaterfallPlane_UV")));;
+
+	//瀑布材质
+	UPROPERTY(EditAnywhere, Category = "StaticMesh", DisplayName="瀑布材质")
+	UMaterialInterface* DefaultMaterial = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, TEXT("/Game/BP/Materials/mi_WaterfallWater_01_02.mi_WaterfallWater_01_02")));
 
 	//粒子
 	UPROPERTY(EditAnywhere, Category = "ParticleSettings",DisplayName="是否生成粒子")
 	bool bSpawnParticles = true;
 
-	UPROPERTY(EditAnywhere, Category = "ParticleSettings", meta = (ClampMin = "0.2", ClampMax = "2"),DisplayName="例子缩放比例")
-	FVector2D ParticleScaleRange = FVector2D(0.5, 1.5); // 粒子的最小缩放比例
+	UPROPERTY(EditAnywhere, Category = "ParticleSettings", meta = (ClampMin = "0.2", ClampMax = "6"),DisplayName="例子缩放比例")
+	FVector2D ParticleScaleRange = FVector2D(1, 1.5); // 粒子的最小缩放比例
 	
 	UPROPERTY(EditAnywhere, Category = "ParticleSettings",DisplayName="粒子之间的最小距离")
 	float MinDistanceBetweenParticles = 1000.0f; // 粒子之间的最小距离
 
-	//粒子引用
-	UPROPERTY(EditDefaultsOnly, Category = "ParticleSettings", DisplayName="中上部粒子资产引用")
-	TObjectPtr<UParticleSystem> CenterParticle;
-
+	
 	UPROPERTY(EditAnywhere, Category = "ParticleSettings", DisplayName="底部粒子资产引用")
-	TObjectPtr<UParticleSystem> BottomParticle;
+	TArray<TObjectPtr<UParticleSystem>>BottomParticles;
 	
 protected:
 	// Called when the game starts or when spawned
@@ -349,6 +349,9 @@ protected:
 	UFUNCTION(BlueprintCallable, Category="WaterFall|Simulation", DisplayName="清理资源")
 	void ClearAllResource();
 
+	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="清理所有曲线")
+	void ClearAllSpline();
+	
 	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="清理所有Mesh")
 	void ClearAllSplineMesh();
 
@@ -377,12 +380,12 @@ protected:
 	void ClusterSplines();
 	
 	
-	UFUNCTION(BlueprintCallable,CallInEditor, Category="WaterFall", DisplayName="SplineMeshToStaticMesh")
+	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="SplineMeshToStaticMesh")
 	UStaticMesh* RebuildStaticMeshFromSplineMesh();
 	
 	static void FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals, TArray<FVector2f>& UVs,  const TArray<int32>& Triangles);
 	
-	UFUNCTION(BlueprintCallable,Category="WaterFall", DisplayName="生成新的StaticMesh")
+	UFUNCTION(CallInEditor,BlueprintCallable,Category="WaterFall", DisplayName="生成新的StaticMesh")
 	void RebuildWaterFallMesh();
 
 	UFUNCTION(Category = "WaterFall|Save", DisplayName="保存StaticMesh到磁盘")
@@ -413,7 +416,7 @@ protected:
 	
 	void SpawnStaticMesh(UStaticMesh* StaticMesh);
 
-	UFUNCTION(CallInEditor, Category="WaterFall")
+	//UFUNCTION(CallInEditor,Category="WaterFall")
 	void BuildStaticMeshFromSplineMesh();
 
 	
@@ -489,8 +492,8 @@ private:
 	//生成的瀑布StaticMesh
 	UStaticMesh* GeneratedWaterFallMesh = nullptr;
 
-	//先在RebuildStaticMeshFromSplineMesh函数中设置StaticMesh的默认材质,再保存资产
-	UMaterialInterface* DefaultMaterial = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, TEXT("/Game/BP/Materials/Checker_Mat.Checker_Mat")));
+	//粒子资产
+	
 
 	UPROPERTY()
 	TArray<UParticleSystemComponent*> SpawnedParticles;
