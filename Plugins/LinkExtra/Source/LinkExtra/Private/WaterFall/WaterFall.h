@@ -121,24 +121,7 @@ struct FEmitterAttributes
 };
 
 
-USTRUCT(BlueprintType)
-struct FEmitterPoints
-{
-	GENERATED_BODY()
-	UPROPERTY(BlueprintReadWrite)
-	FVector Location;
 
-	UPROPERTY(BlueprintReadWrite)
-	FVector Normal;
-
-	UPROPERTY(BlueprintReadWrite)
-	FVector Velocity;
-	
-	FEmitterPoints()
-		: Location(FVector::ZeroVector), Normal(FVector::ZeroVector), Velocity(FVector::ZeroVector)
-	{}
-	
-};
 
 //储存buffer数据
 struct FLODData
@@ -213,14 +196,12 @@ public:
 	FString SavePath = "/Game/BP/";
 
 	
-	UPROPERTY(EditDefaultsOnly, Category = "EmissionSourceSetup", DisplayName="是否贴地")
+	UPROPERTY(EditAnywhere, Category = "EmissionSourceSetup", DisplayName="是否贴地")
 	bool bSnapToGround = false;
 
 	UPROPERTY(EditAnywhere, Category = "EmissionSourceSetup", DisplayName="随机数")
 	int32 Seed = 666;
 	
-	UPROPERTY(EditDefaultsOnly, Category = "EmissionSourceSetup", DisplayName="初始位置偏移")
-	float Disturb = 0.0f;
 
 	UPROPERTY(EditAnywhere, Category = "EmissionSourceSetup", DisplayName="发射粒子大小", meta = (ClampMin = " 0.2"), meta = (ClampMax = "2"))
 	float ISMScale = 1.0f;
@@ -236,8 +217,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Simulation", DisplayName="粒子生命周期")
 	float ParticleLife = 7.0f;
 
-	UPROPERTY(EditAnywhere, Category = "Simulation", DisplayName="粒子初始速度大小")
-	float ParticleVelocity = 1.0f;
+	UPROPERTY(EditAnywhere, Category = "Simulation", DisplayName="粒子初始速度大小",meta = (ClampMin = " 0.5"), meta = (ClampMax = "10"))
+	float ParticleVelocityScale = 4.0f;
 
 	//获取粒子buffer的时间间隔
 	UPROPERTY(EditAnywhere, Category = "Simulation", BlueprintReadWrite, meta = (ClampMin = " 0.1"), meta = (ClampMax = "2"), DisplayName="获取Buffer间隔时间")
@@ -245,7 +226,7 @@ public:
 	
 
 	//Spline重采样间距
-	UPROPERTY(EditAnywhere, Category = "ResampleSpline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "10"), DisplayName="重采样分段长度")
+	UPROPERTY(EditAnywhere, Category = "ResampleSpline", BlueprintReadWrite, meta = (ClampMin = "1"), meta = (ClampMax = "20"), DisplayName="重采样分段长度")
 	float  RestLength = 2.0f;
 
 	//Spline重采样点数量
@@ -306,7 +287,7 @@ protected:
 	virtual void BeginPlay() override;
 
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Emitter", DisplayName="Spline发射源")
-	void ComputeEmitterPoints(USplineComponent* EmitterSplineComponent, int32 EmitterPointsCount, bool bSnapToGrid = false);
+	void ComputeEmitterPoints(USplineComponent* EmitterSplineComponent, int32 EmitterPointsCount, bool bProjectToGround = false);
 
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Emitter", DisplayName="Spline发射源")
 	void UpdateEmitterPoints();
@@ -359,7 +340,7 @@ protected:
 	void DestroyWaterFallMeshActor();
 	
 	UFUNCTION( Category="WaterFall", DisplayName="重采样Spline")
-	static TArray<FVector> ResampleSplinePoints( const USplineComponent* InSpline, float ResetLength, float SplineLength);
+	TArray<FVector> ResampleSplinePoints( const USplineComponent* InSpline, float ResetLength, float SplineLength);
 
 	UFUNCTION( Category="WaterFall", DisplayName="重采样Spline")
 	static TArray<FVector> ResampleSplinePointsWithNumber(const USplineComponent* InSpline, int32 SampleNum);
@@ -397,6 +378,10 @@ protected:
 	const USplineMeshComponent* CurrentSplineMeshComponent,
 	const TArray<USplineMeshComponent*>& AllSplineMeshComponents, float SegmentLength);
 
+	//计算SplineUV的偏移和缩放
+	FVector4 CalculateUVScaleAndOffsetBasedOnSpline( const USplineComponent* SplineComponent, const USplineMeshComponent* CurrentSplineMeshComponent,
+		 const TArray<USplineMeshComponent*>& AllSplineMeshComponents,float OriginalSegmentLength, bool bNormalize = false);
+	
 
 	void SpawnParticles();
 	void ClearSpawnedParticles();
@@ -416,7 +401,7 @@ protected:
 	
 	void SpawnStaticMesh(UStaticMesh* StaticMesh);
 
-	//UFUNCTION(CallInEditor,Category="WaterFall")
+	UFUNCTION(CallInEditor,Category="WaterFall")
 	void BuildStaticMeshFromSplineMesh();
 
 	
@@ -437,8 +422,6 @@ private:
 	FOnSplineDataChanged SplineDataChangedEvent;
 #endif
 	
-	//用Spline撒的点作为发射源
-	TArray<FEmitterPoints> EmitterPoints;
 
 	//用Spline撒的点作为发射源
 	FEmitterAttributes SourceEmitterAttributes;

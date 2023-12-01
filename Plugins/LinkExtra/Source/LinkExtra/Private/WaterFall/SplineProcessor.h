@@ -72,7 +72,7 @@ struct FClusterWeight
 	UPROPERTY(EditAnywhere, Category = "Spline|Cluster", DisplayName="Spline曲率")
 	float Curvature = 1.0f;
 	UPROPERTY(EditAnywhere, Category = "Spline|Cluster", DisplayName="分簇阈值")
-	float ClusterThreshold = 1.0f;
+	float ClusterThreshold = 1000.0f;
 };
 
 UCLASS()
