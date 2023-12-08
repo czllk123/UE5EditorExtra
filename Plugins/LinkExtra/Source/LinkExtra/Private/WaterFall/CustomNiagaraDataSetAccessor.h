@@ -8,7 +8,18 @@
 
 
 
+// 5.21与5.3某些API不兼容，使用宏来展开不同的代码
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 3
+	#define GET_INT32_COMPONENT_START(VariableLayout) (VariableLayout.Int32ComponentStart)
+	#define GET_FLOAT_COMPONENT_START(VariableLayout) (VariableLayout.FloatComponentStart)
+	#define GET_HALF_COMPONENT_START(VariableLayout) (VariableLayout.HalfComponentStart)
 
+#else
+	#define GET_INT32_COMPONENT_START(VariableLayout) (VariableLayout.GetInt32ComponentStart())
+	#define GET_FLOAT_COMPONENT_START(VariableLayout) (VariableLayout.GetFloatComponentStart())
+	#define GET_HALF_COMPONENT_START(VariableLayout) (VariableLayout.GetHalfComponentStart())
+
+#endif
 
 
 class FCustomNiagaraDataSetAccessor
