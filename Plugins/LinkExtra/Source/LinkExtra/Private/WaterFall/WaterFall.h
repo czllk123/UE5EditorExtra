@@ -128,7 +128,8 @@ struct FLODData
 {
 	TArray<FVector3f> Vertices;
 	TArray<FVector3f> Normals;
-	TArray<FVector2f> UVs;
+	TArray<FVector2f> UV1;
+	TArray<FVector2f> UV2;
 	TArray<int32> Triangles;
 	int32 VertexCount; // 用于追踪当前LOD的顶点数量
 };
@@ -177,7 +178,7 @@ public:
 	USplineProcessor* SplineProcessorInstance; 
 	
 	//要获取的粒子的信息
-	TArray<FName> ParticlesVariables = {"UniqueID","Position",  "Velocity", "Age", "CollisionDelayTimer"};
+	TArray<FName> ParticlesVariables = {"UniqueID","Position",  "Velocity", "Age", "HasCollided"};
 
 	FNiagaraSystemInstance* StoreSystemInstance;
 	
@@ -186,6 +187,7 @@ public:
 
 
 	/////////////////////////////////////////////DetailParameters//////////////////////////////////////
+
 
 	// 资产名称
 	UPROPERTY(EditAnywhere, Category = "SaveToDisk",DisplayName="资产名称")
@@ -262,12 +264,18 @@ public:
 
 	//瀑布SplineMesh引用的StaticMesh
 	UPROPERTY(EditAnywhere, Category = "SplineMesh", DisplayName="输入生成瀑布的静态网格")
-	UStaticMesh* SourceStaticMesh = Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(), nullptr, TEXT("/Game/BP/SM_WaterfallPlane_UV.SM_WaterfallPlane_UV")));;
+	UStaticMesh* SourceStaticMesh;
 
 	//瀑布材质
 	UPROPERTY(EditAnywhere, Category = "StaticMesh", DisplayName="瀑布材质")
-	UMaterialInterface* DefaultMaterial = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, TEXT("/Game/BP/Materials/mi_WaterfallWater_01_02.mi_WaterfallWater_01_02")));
+	UMaterialInterface* DefaultMaterial; 
 
+	//UV整体偏移和缩放
+	UPROPERTY(EditAnywhere, Category = "StaticMesh", meta = (ClampMin = "-10", ClampMax = "10"), DisplayName="UV整体偏移区间")
+	FVector2f GlobalUVOffsetRange = FVector2f(-10, 10);
+	UPROPERTY(EditAnywhere, Category = "StaticMesh", meta = (ClampMin = "0.5", ClampMax = "1.5"), DisplayName="UV整体缩放区间")
+	FVector2f GlobalUVScaleRange = FVector2f(0.75, 1.25);
+	
 	//粒子
 	UPROPERTY(EditAnywhere, Category = "ParticleSettings",DisplayName="是否生成粒子")
 	bool bSpawnParticles = true;
@@ -285,13 +293,14 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
-
+	
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Emitter", DisplayName="Spline发射源")
 	void ComputeEmitterPoints(USplineComponent* EmitterSplineComponent, int32 EmitterPointsCount, bool bProjectToGround = false);
 
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Emitter", DisplayName="Spline发射源")
 	void UpdateEmitterPoints();
 
+	static TWeakObjectPtr<AWaterFall> GetSelectedWaterFallActor();
 	
 	UFUNCTION(BlueprintCallable,Category="WaterFall|Spline", DisplayName="开始模拟")
 	void StartSimulation();
@@ -364,7 +373,7 @@ protected:
 	UFUNCTION(BlueprintCallable, Category="WaterFall", DisplayName="SplineMeshToStaticMesh")
 	UStaticMesh* RebuildStaticMeshFromSplineMesh();
 	
-	static void FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals, TArray<FVector2f>& UVs,  const TArray<int32>& Triangles);
+	static void FillMeshDescription(FMeshDescription& MeshDescription, const TArray<FVector3f>& Positions, const TArray<FVector3f>& Normals, TArray<FVector2f>& UV1, TArray<FVector2f>& UV2, const TArray<int32>& Triangles);
 	
 	UFUNCTION(CallInEditor,BlueprintCallable,Category="WaterFall", DisplayName="生成新的StaticMesh")
 	void RebuildWaterFallMesh();
@@ -379,8 +388,8 @@ protected:
 	const TArray<USplineMeshComponent*>& AllSplineMeshComponents, float SegmentLength);
 
 	//计算SplineUV的偏移和缩放
-	FVector4 CalculateUVScaleAndOffsetBasedOnSpline( const USplineComponent* SplineComponent, const USplineMeshComponent* CurrentSplineMeshComponent,
-		 const TArray<USplineMeshComponent*>& AllSplineMeshComponents,float OriginalSegmentLength, bool bNormalize = false);
+	FVector2f CalculateUVOffsetAndScaleBasedOnSpline( const USplineComponent* SplineComponent, const USplineMeshComponent* CurrentSplineMeshComponent,
+		 const TArray<USplineMeshComponent*>& AllSplineMeshComponents, bool bNormalize = false);
 	
 
 	void SpawnParticles();
@@ -395,7 +404,7 @@ protected:
 
 	// 为每个LOD创建MeshDescription
 	void CreateMeshDescriptionsForLODs(const TMap<int32, FLODData>& LODDataMap, TArray<FMeshDescription>& OutMeshDescriptions);
-
+	
 	// 从MeshDescriptions创建StaticMesh
 	UStaticMesh* CreateStaticMeshFromLODMeshDescriptions(const TArray<FMeshDescription>& MeshDescriptions);
 	
@@ -421,8 +430,12 @@ private:
 #if WITH_EDITOR
 	FOnSplineDataChanged SplineDataChangedEvent;
 #endif
-	
 
+	//插件目录
+	FName PluginName = UE_PLUGIN_NAME;
+	FString ResourcePrefix = FPaths::Combine(TEXT("/"),PluginName.ToString(), TEXT(""));
+	
+	
 	//用Spline撒的点作为发射源
 	FEmitterAttributes SourceEmitterAttributes;
 
@@ -438,7 +451,7 @@ private:
 	TMap<FNiagaraSystemInstanceID, FGpuEmitterCache> GpuEmitterData;
 	
 	
-	const FNiagaraDataSet* GetParticleDataSet(class FNiagaraSystemInstance* SystemInstance, class FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter);
+	//const FNiagaraDataSet* GetParticleDataSet(class FNiagaraSystemInstance* SystemInstance, class FNiagaraEmitterInstance* EmitterInstance, int32 iEmitter);
 	
 	USplineComponent* WaterFallSpline;
 	
